@@ -4,14 +4,8 @@
  *
  * @param jestLite - Optional. The imported Jest Lite module (default export).
  */
-export async function setupJestLiteGlobals(jestLite?: any): Promise<void> {
-    if (!jestLite) {
-        //@ts-ignore
-        jestLite = await import('https://cdn.skypack.dev/jest-lite');
-    }
-
+export async function setupJestLiteGlobals(jestLite: any) {
     const { describe, it, expect, run, beforeAll, afterAll, beforeEach, afterEach } = jestLite;
-
     (globalThis as any).describe = describe;
     (globalThis as any).it = it;
     (globalThis as any).expect = expect;
