@@ -55,31 +55,18 @@ Methods:
     <!-- your scripts -->
 </head>
 <body>
-    <a href="javascript:history.back()" class="back-link">&larr; Back</a>
-
-    <div id="test-results">
-        <div class="test-summary" id="test-summary"></div>
-        <table class="test-table">
-            <thead>
-                <tr>
-                    <th width="100px">Status</th>
-                    <th>Test</th>
-                    <th width="100px">Duration</th>
-                </tr>
-            </thead>
-            <tbody id="test-results-body"></tbody>
-        </table>
-    </div>
+    <div id="app"></div>
 
     <script type="module">
-        import { createReporter } from './dist/index.esm.js';
+        import JestBrowserReporter from 'https://unpkg.com/jest-browser-reporter';
         import './tests_to_run.ts';
 
-        const reporter = createReporter();
+        const reporter = new JestBrowserReporter({
+            container: document.getElementById('app')
+        });
 
         run().then((results) => {
             reporter.render(results);
-            console.log('Test results:', results);
         });
     </script>
 </body>

@@ -13,7 +13,9 @@ export function createReporter(options: TestResultsOptions) {
     return new TestResults(options);
 }
 
+export { createReporter as JestBrowserReporter };
+
 // Global registration for script tag usage
 if (typeof window !== 'undefined') {
-    (window as any).JestBrowserReporter = { createReporter };
+    (window as any).JestBrowserReporter = createReporter;
 }
