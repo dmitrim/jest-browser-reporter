@@ -74,11 +74,11 @@ const STYLES = `
     color: #64748b;
 }
 
-.jest-browser-reporter .passed .stat-value {
+.jest-browser-reporter .pass .stat-value {
     color: #10b981;
 }
 
-.jest-browser-reporter .failed .stat-value {
+.jest-browser-reporter .fail .stat-value {
     color: #ef4444;
 }
 
@@ -279,19 +279,19 @@ export class JestBrowserReporter {
                             <span class="stat-value">0</span>
                             <span class="stat-label">Total Tests</span>
                         </div>
-                        <div class="stat passed">
+                        <div class="stat pass">
                             <span class="stat-value">0</span>
                             <span class="stat-label">Passed</span>
                         </div>
-                        <div class="stat failed">
+                        <div class="stat fail">
                             <span class="stat-value">0</span>
                             <span class="stat-label">Failed</span>
                         </div>
                     </div>
                     <div class="filter-controls">
                         <button class="filter-btn active" data-filter="all">All Tests</button>
-                        <button class="filter-btn" data-filter="passed">Passed Only</button>
-                        <button class="filter-btn" data-filter="failed">Failed Only</button>
+                        <button class="filter-btn" data-filter="pass">Passed Only</button>
+                        <button class="filter-btn" data-filter="fail">Failed Only</button>
                     </div>
                 </div>
                 
@@ -334,8 +334,8 @@ export class JestBrowserReporter {
 
     updateSummary() {
         const total = this.results.length;
-        const passed = this.results.filter(t => t.status === 'pass').length;
-        const failed = total - passed;
+        const pass = this.results.filter(t => t.status === 'pass').length;
+        const fail = total - pass;
         if (!this.elements || !this.elements.summary)
             return;
         this.elements.summary.innerHTML = `
@@ -344,19 +344,19 @@ export class JestBrowserReporter {
                     <span class="stat-value">${total}</span>
                     <span class="stat-label">Total Tests</span>
                 </div>
-                <div class="stat passed">
-                    <span class="stat-value">${passed}</span>
+                <div class="stat pass">
+                    <span class="stat-value">${pass}</span>
                     <span class="stat-label">Passed</span>
                 </div>
-                <div class="stat failed">
-                    <span class="stat-value">${failed}</span>
+                <div class="stat fail">
+                    <span class="stat-value">${fail}</span>
                     <span class="stat-label">Failed</span>
                 </div>
             </div>
             <div class="filter-controls">
                 <button class="filter-btn ${this.currentFilter === 'all' ? 'active' : ''}" data-filter="all">All Tests</button>
-                <button class="filter-btn ${this.currentFilter === 'passed' ? 'active' : ''}" data-filter="passed">Passed Only</button>
-                <button class="filter-btn ${this.currentFilter === 'failed' ? 'active' : ''}" data-filter="failed">Failed Only</button>
+                <button class="filter-btn ${this.currentFilter === 'pass' ? 'active' : ''}" data-filter="pass">Passed Only</button>
+                <button class="filter-btn ${this.currentFilter === 'fail' ? 'active' : ''}" data-filter="fail">Failed Only</button>
             </div>
         `;
 
