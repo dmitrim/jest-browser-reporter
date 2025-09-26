@@ -1,0 +1,28 @@
+{
+  "name": "@dmarfin/jest-browser-reporter",
+  "version": "1.0.0-a0",
+  "description": "A beautiful browser-based test results reporter for Jest Lite",
+  "author": "Dmitriy Marfin",
+  "license": "MIT",
+  "main": "cjs/index.js",
+  "module": "esm/index.js",
+  "browser": "umd/index.js",
+  "types": "types/index.d.ts",
+  "files": [
+    "cjs",
+    "esm",
+    "umd",
+    "types",
+    "README.md"
+  ],
+  "private": false,
+  "dependencies": {},
+  "keywords": [
+    "jest",
+    "reporter",
+    "browser",
+    "test",
+    "results",
+    "jest-lite"
+  ]
+}
