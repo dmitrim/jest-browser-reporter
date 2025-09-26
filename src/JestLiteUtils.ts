@@ -2,6 +2,8 @@
  * Setup Jest Lite functions as globals to run tests
  * in a Jest-like style (describe, it, expect, etc.).
  *
+ * Adds support for async before/beforeAll and .only/.skip.
+ *
  * @param jestLite - The imported Jest Lite module (default export).
  */
 export function setupJestLiteGlobals(jestLite: any): void {
@@ -16,14 +18,13 @@ export function setupJestLiteGlobals(jestLite: any): void {
         afterAll,
         beforeEach,
         afterEach,
-        // other exports can be added if needed
     } = jestLite;
 
     // Arrays to track pending before-hook promises and the first encountered error
     const pendingBeforePromises: Promise<any>[] = [];
     let firstBeforeError: any = null;
 
-    // Helper: register a noop hook with the original API to avoid double side-effects later
+    // Helper: register a noop hook with the original API to avoid double side-effects
     function registerNoop(originalRegister: Function) {
         try {
             // register a no-op function so runner still sees a hook (if it relies on hooks count)
