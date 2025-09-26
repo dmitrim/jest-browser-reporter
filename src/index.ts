@@ -1,20 +1,4 @@
-/**
- * Setup Jest Lite functions as globals to run tests
- * in a Jest-like style (describe, it, expect, etc.).
- *
- * @param jestLite - Optional. The imported Jest Lite module (default export).
- */
-export async function setupJestLiteGlobals(jestLite: any) {
-    const { describe, it, expect, run, beforeAll, afterAll, beforeEach, afterEach } = jestLite;
-    (globalThis as any).describe = describe;
-    (globalThis as any).it = it;
-    (globalThis as any).expect = expect;
-    (globalThis as any).before = (globalThis as any).beforeAll = beforeAll;
-    (globalThis as any).after = (globalThis as any).afterAll = afterAll;
-    (globalThis as any).beforeEach = beforeEach;
-    (globalThis as any).afterEach = afterEach;
-    (globalThis as any).run = run;
-}
+export { setupJestLiteGlobals } from "./JestLiteUtils";
 
 
 // Improved Jest Browser Reporter
