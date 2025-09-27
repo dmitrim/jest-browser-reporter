@@ -29,6 +29,7 @@ const STYLES = `
 .jest-browser-reporter .stat-label { font-size: 14px; color: #64748b; }
 .jest-browser-reporter .pass .stat-value { color: #10b981; }
 .jest-browser-reporter .fail .stat-value { color: #ef4444; }
+.jest-browser-reporter .skip .stat-value { color: #f59e0b; }
 .jest-browser-reporter .total .stat-value { color: #4a6ee0; }
 
 /* Filter & grouping controls */
@@ -48,6 +49,7 @@ const STYLES = `
 .jest-browser-reporter .status-indicator { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 4px; font-size: 14px; font-weight: 500; }
 .jest-browser-reporter .status-pass { background-color: #d1fae5; color: #065f46; }
 .jest-browser-reporter .status-fail { background-color: #fee2e2; color: #991b1b; }
+.jest-browser-reporter .status-skip { background-color: #fef3c7; color: #92400e; }
 
 /* Test path styling */
 .jest-browser-reporter .test-path { color: #64748b; font-size: 13px; }
@@ -129,12 +131,14 @@ export class JestBrowserReporter {
                         <div class="stat total"><span class="stat-value">0</span><span class="stat-label">Total Tests</span></div>
                         <div class="stat pass"><span class="stat-value">0</span><span class="stat-label">Passed</span></div>
                         <div class="stat fail"><span class="stat-value">0</span><span class="stat-label">Failed</span></div>
+                        <div class="stat skip"><span class="stat-value">0</span><span class="stat-label">Skipped</span></div>
                     </div>
                     <div class="filter-controls">
                         <input type="text" class="search-input" placeholder="Search tests…" />
                         <button class="filter-btn active" data-filter="all">All</button>
                         <button class="filter-btn" data-filter="pass">Passed</button>
                         <button class="filter-btn" data-filter="fail">Failed</button>
+                        <button class="filter-btn" data-filter="skip">Skipped</button>
                         <button class="group-toggle-btn ${this.groupBySuite ? 'active' : ''}" data-group-by="suite">Group by Suite</button>
                     </div>
                 </div>
@@ -252,19 +256,23 @@ export class JestBrowserReporter {
     updateSummary() {
         const total = this.results.length;
         const pass = this.results.filter(t => t.status === 'pass').length;
-        const fail = total - pass;
+        const fail = this.results.filter(t => t.status === 'fail').length;
+        const skip = this.results.filter(t => t.status === 'skip').length;
+
         if (!this.elements || !this.elements.summary) return;
         this.elements.summary.innerHTML = `
             <div class="summary-stats">
                 <div class="stat total"><span class="stat-value">${total}</span><span class="stat-label">Total</span></div>
                 <div class="stat pass"><span class="stat-value">${pass}</span><span class="stat-label">Passed</span></div>
                 <div class="stat fail"><span class="stat-value">${fail}</span><span class="stat-label">Failed</span></div>
+                <div class="stat skip"><span class="stat-value">${skip}</span><span class="stat-label">Skipped</span></div>
             </div>
             <div class="filter-controls">
                 <input type="text" class="search-input" placeholder="Search tests…" value="${this.escapeHtml(this.currentSearch)}"/>
                 <button class="filter-btn ${this.currentFilter === 'all' ? 'active' : ''}" data-filter="all">All</button>
                 <button class="filter-btn ${this.currentFilter === 'pass' ? 'active' : ''}" data-filter="pass">Passed</button>
                 <button class="filter-btn ${this.currentFilter === 'fail' ? 'active' : ''}" data-filter="fail">Failed</button>
+                <button class="filter-btn ${this.currentFilter === 'skip' ? 'active' : ''}" data-filter="skip">Skipped</button>
                 <button class="group-toggle-btn ${this.groupBySuite ? 'active' : ''}" data-group-by="suite">Group by Suite</button>
             </div>
         `;
@@ -299,13 +307,14 @@ export class JestBrowserReporter {
         Object.keys(groups).forEach(groupKey => {
             const tests = groups[groupKey];
             const pass = tests.filter(t => t.status === 'pass').length;
-            const fail = tests.length - pass;
+            const fail = tests.filter(t => t.status === 'fail').length;
+            const skip = tests.filter(t => t.status === 'skip').length;
             // group header (store data-group to identify rows)
             html += `
                 <tr class="group-header" data-group="${this.escapeHtml(groupKey)}" data-collapsed="false">
                     <td colspan="3">
                         <span class="group-title">${this.escapeHtml(groupKey)}</span>
-                        <span class="group-meta"> — ${tests.length} tests (${pass} passed, ${fail} failed)</span>
+                        <span class="group-meta"> — ${tests.length} tests (${pass} passed, ${fail} failed, ${skip} skipped)</span>
                     </td>
                 </tr>
             `;
@@ -321,9 +330,19 @@ export class JestBrowserReporter {
 
     // Single test row generator; includes a data-search attribute (lowercased)
     generateTestRow(test: any, index: any, groupKey?: string) {
-        const statusClass = test.status === 'pass' ? 'status-pass' : 'status-fail';
-        const statusIcon = test.status === 'pass' ? '✅' : '❌';
-        const statusText = test.status === 'pass' ? 'PASS' : 'FAIL';
+        const statusClass = `status-${test.status}`;
+        const statusIcons: any = {
+            'pass': '✅',
+            'fail': '❌',
+            'skip': '⏭️'
+        };
+        const statusTexts: any = {
+            'pass': 'PASS',
+            'fail': 'FAIL',
+            'skip': 'SKIP'
+        };
+        const statusIcon = statusIcons[test.status] || '❓';
+        const statusText = statusTexts[test.status] || test.status.toUpperCase();
 
         const sanitizedPath = this.sanitizePath(test.testPath);
         const displayPath = sanitizedPath.length ? sanitizedPath.join(' > ') : (test.name || 'Unnamed Test');
@@ -375,6 +394,8 @@ export class JestBrowserReporter {
             const groupRows = Array.from(container.querySelectorAll(`tr.group-row[data-group="${safeSelector}"]`)) as HTMLElement[];
             let visibleCount = 0;
             let passed = 0;
+            let failed = 0;
+            let skipped = 0;
 
             groupRows.forEach(row => {
                 const status = row.getAttribute('data-status') || '';
@@ -390,12 +411,14 @@ export class JestBrowserReporter {
                 if (shouldShow) {
                     visibleCount++;
                     if (status === 'pass') passed++;
+                    else if (status === 'fail') failed++;
+                    else if (status === 'skip') skipped++;
                 }
             });
 
             // Update header meta and visibility
             const meta = header.querySelector('.group-meta') as HTMLElement | null;
-            if (meta) meta.textContent = ` — ${visibleCount} tests (${passed} passed, ${visibleCount - passed} failed)`;
+            if (meta) meta.textContent = ` — ${visibleCount} tests (${passed} passed, ${failed} failed, ${skipped} skipped)`;
             header.style.display = visibleCount > 0 ? '' : 'none';
         });
     }
