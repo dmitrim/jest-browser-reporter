@@ -1,6 +1,5 @@
 export { setupJestLiteGlobals } from "./JestLiteUtils";
 
-
 // Improved Jest Browser Reporter
 // - Adds grouping by suite (first non-root describe block)
 // - Hides technical path elements like ROOT_DESCRIBE_BLOCK
@@ -73,6 +72,45 @@ const STYLES = `
 
 /* Duration indicator */
 .jest-browser-reporter .duration { color: #64748b; font-size: 14px; }
+
+/* Running indicator styles */
+.jest-browser-reporter .running-indicator {
+    padding: 20px;
+    text-align: center;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    margin-bottom: 20px;
+    font-size: 16px;
+    color: #4a6ee0;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+.jest-browser-reporter .running-indicator.hidden {
+    display: none;
+}
+
+.jest-browser-reporter .running-spinner {
+    width: 20px;
+    height: 20px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #4a6ee0;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+/* Hide test results when running indicator is active */
+.jest-browser-reporter .test-results.hidden {
+    display: none;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
 `;
 
 export class JestBrowserReporter {
@@ -98,17 +136,72 @@ export class JestBrowserReporter {
         this.currentFilter = 'all';
         this.currentSearch = '';
         this.groupBySuite = !!options.groupBySuite;
+
+        // Show running indicator immediately when reporter is created
         this.init();
+        this.showRunningIndicator();
+    }
+
+    /**
+     * Show running indicator with custom message and hide test results
+     * @param message - The message to display (default: 'Running tests…')
+     */
+    private showRunningIndicator(message: string = 'Running tests…') {
+        if (!this.elements || !this.elements.container) return;
+
+        let indicator = this.elements.container.querySelector('.running-indicator') as HTMLElement | null;
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.className = 'running-indicator';
+            // Insert after back-link if present, otherwise at the beginning
+            const backLink = this.elements.container.querySelector('.back-link');
+            if (backLink && backLink.nextSibling) {
+                this.elements.container.insertBefore(indicator, backLink.nextSibling);
+            } else {
+                this.elements.container.insertBefore(indicator, this.elements.container.firstChild);
+            }
+        }
+
+        indicator.innerHTML = `
+            <div class="running-spinner"></div>
+            <span class="running-text">${this.escapeHtml(message)}</span>
+        `;
+        indicator.classList.remove('hidden');
+
+        // Hide test results UI while tests are running
+        const testResults = this.elements.container.querySelector('.test-results') as HTMLElement | null;
+        if (testResults) {
+            testResults.classList.add('hidden');
+        }
+    }
+
+    /**
+     * Hide the running indicator and show test results
+     */
+    private hideRunningIndicator() {
+        if (!this.elements || !this.elements.container) return;
+
+        // Hide running indicator
+        const indicator = this.elements.container.querySelector('.running-indicator') as HTMLElement | null;
+        if (indicator) {
+            indicator.classList.add('hidden');
+        }
+
+        // Show test results UI
+        const testResults = this.elements.container.querySelector('.test-results') as HTMLElement | null;
+        if (testResults) {
+            testResults.classList.remove('hidden');
+        }
     }
 
     // Initialize UI and listeners
-    init() {
+    private init() {
         this.injectStyles();
         this.createHTMLStructure();
         this.setupEventListeners();
     }
 
-    injectStyles() {
+    private injectStyles() {
         if (document.getElementById('jest-browser-reporter-styles')) return;
         const style = document.createElement('style');
         style.id = 'jest-browser-reporter-styles';
@@ -117,7 +210,7 @@ export class JestBrowserReporter {
     }
 
     // Build DOM skeleton
-    createHTMLStructure() {
+    private createHTMLStructure() {
         const container = document.createElement('div');
         container.className = 'jest-browser-reporter';
         container.innerHTML = this.generateHTML();
@@ -135,7 +228,7 @@ export class JestBrowserReporter {
         this.attachDelegatedListeners(container);
     }
 
-    generateHTML() {
+    private generateHTML() {
         const backLink = this.options.showBackLink ? '<a href="javascript:history.back()" class="back-link">&larr; Back</a>' : '';
         return `
             ${backLink}
@@ -175,7 +268,7 @@ export class JestBrowserReporter {
     }
 
     // Attach event listeners for filters/search (re-attached after summary re-render)
-    setupEventListeners() {
+    private setupEventListeners() {
         if (!this.elements) return;
 
         // Filter buttons
@@ -220,7 +313,7 @@ export class JestBrowserReporter {
         this.updateClearButtonVisibility();
     }
 
-    onFilterClick(e: Event) {
+    private onFilterClick(e: Event) {
         const target = e.currentTarget as HTMLElement;
         if (!this.elements) return;
         const filterButtons = this.elements.container.querySelectorAll('.filter-btn');
@@ -230,7 +323,7 @@ export class JestBrowserReporter {
         this.applyFilter();
     }
 
-    onGroupToggleClick() {
+    private onGroupToggleClick() {
         this.groupBySuite = !this.groupBySuite;
         if (this.elements) {
             const groupBtn = this.elements.container.querySelector('.group-toggle-btn');
@@ -239,7 +332,7 @@ export class JestBrowserReporter {
         this.renderTable();
     }
 
-    onClearSearch() {
+    private onClearSearch() {
         if (!this.elements?.searchInput) return;
 
         this.elements.searchInput.value = '';
@@ -251,7 +344,7 @@ export class JestBrowserReporter {
         this.elements.searchInput.focus();
     }
 
-    updateClearButtonVisibility() {
+    private updateClearButtonVisibility() {
         if (!this.elements?.searchClear) return;
 
         const hasText = this.currentSearch.length > 0;
@@ -263,7 +356,7 @@ export class JestBrowserReporter {
     }
 
     // Delegated click handling for error toggles and group header toggles
-    attachDelegatedListeners(container: HTMLElement) {
+    private attachDelegatedListeners(container: HTMLElement) {
         container.addEventListener('click', (ev) => {
             // Toggle error details
             const btn = (ev.target as HTMLElement).closest('.toggle-error') as HTMLElement | null;
@@ -297,15 +390,22 @@ export class JestBrowserReporter {
         });
     }
 
-    // Render results into the reporter
+    /**
+     * Render test results into the reporter and automatically hide running indicator
+     * @param results - Array of test results to display
+     */
     render(results: any[]) {
         this.results = results || [];
+
+        // Automatically hide running indicator and show test results
+        this.hideRunningIndicator();
+
         this.updateSummary();
         this.renderTable();
     }
 
     // Update summary area (re-renders the controls area which contains the search input)
-    updateSummary() {
+    private updateSummary() {
         const total = this.results.length;
         const pass = this.results.filter(t => t.status === 'pass').length;
         const fail = this.results.filter(t => t.status === 'fail').length;
@@ -342,7 +442,7 @@ export class JestBrowserReporter {
     }
 
     // Render table rows; when grouped, produce header + rows (no nested tbody)
-    renderTable() {
+    private renderTable() {
         if (!this.elements?.tableBody) return;
         const tbody = this.elements.tableBody as HTMLElement;
 
@@ -385,7 +485,7 @@ export class JestBrowserReporter {
     }
 
     // Single test row generator; includes a data-search attribute (lowercased)
-    generateTestRow(test: any, index: any, groupKey?: string) {
+    private generateTestRow(test: any, index: any, groupKey?: string) {
         const statusClass = `status-${test.status}`;
         const statusIcons: any = {
             'pass': '✅',
@@ -424,7 +524,7 @@ export class JestBrowserReporter {
     }
 
     // Apply filters and search; updates group meta counts and header visibility
-    applyFilter() {
+    private applyFilter() {
         if (!this.elements?.tableBody) return;
         const container = this.elements.tableBody;
         const rowsAll = Array.from(container.querySelectorAll('tr.group-row')) as HTMLElement[];
@@ -480,13 +580,13 @@ export class JestBrowserReporter {
     }
 
     // Remove technical parts like ROOT_DESCRIBE_BLOCK from path
-    sanitizePath(path: any): string[] {
+    private sanitizePath(path: any): string[] {
         if (!Array.isArray(path)) return [];
         return path.filter((p: string) => !!p && p !== 'ROOT_DESCRIBE_BLOCK');
     }
 
     // Decide a group key for a test (first non-root describe)
-    getGroupKey(test: any): string {
+    private getGroupKey(test: any): string {
         const sanitized = this.sanitizePath(test.testPath);
         if (sanitized.length >= 2) {
             return sanitized[0];
@@ -501,7 +601,7 @@ export class JestBrowserReporter {
     }
 
     // Simple HTML escape for safe insertion
-    escapeHtml(value: string) {
+    private escapeHtml(value: string) {
         if (!value) return '';
         return String(value)
             .replace(/&/g, '&amp;')
@@ -512,13 +612,13 @@ export class JestBrowserReporter {
     }
 
     // Escape string for use inside attribute selector (basic)
-    escapeForSelector(value: string) {
+    private escapeForSelector(value: string) {
         if (!value) return '';
         return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     }
 
     // Debounce helper
-    debounce(fn: (e: Event) => void, wait: number) {
+    private debounce(fn: (e: Event) => void, wait: number) {
         let timeout: number | null = null;
         return (e: Event) => {
             if (timeout) window.clearTimeout(timeout);
@@ -534,7 +634,7 @@ export class JestBrowserReporter {
         this.dipose();
     }
 
-    dipose() {
+    private dipose() {
         if (!this.elements || !this.elements.container) return;
         if (this.elements.container.parentNode) {
             this.elements.container.parentNode.removeChild(this.elements.container);
