@@ -2,117 +2,409 @@ import { runJestLite } from "./JestLiteUtils";
 
 export { setupJestLiteGlobals } from "./JestLiteUtils";
 
-// Improved Jest Browser Reporter
-// - Adds grouping by suite (first non-root describe block)
-// - Hides technical path elements like ROOT_DESCRIBE_BLOCK
-// - Uses event delegation instead of inline onclick handlers
-// - Shows collapsible group sections with per-group pass/fail counts
-// - Adds live search by test name/path (debounced)
-// - All user-facing text and comments are in English
+// Enhanced Jest Browser Reporter
+// - Improved button styling and positioning
+// - Added visual feedback for running tests
+// - Enhanced responsive design for mobile devices
+// - Added keyboard shortcuts (Ctrl+F for search, Escape to clear)
+// - Improved loading states and animations
+// - Better error handling and user feedback
 
-export type JestBrowserReporterOptions = { container: HTMLElement; showBackLink?: boolean; groupBySuite?: boolean };
+export type JestBrowserReporterOptions = {
+    container: HTMLElement;
+    showBackLink?: boolean;
+    groupBySuite?: boolean;
+    autoRun?: boolean;
+};
 
 const STYLES = `
 /* Base styles */
 .jest-browser-reporter * { box-sizing: border-box; margin: 0; padding: 0; }
-.jest-browser-reporter { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f5f7fa; padding: 20px; }
-.jest-browser-reporter .back-link { display: inline-block; margin-bottom: 20px; text-decoration: none; color: #4a6ee0; font-weight: 500; padding: 8px 16px; border-radius: 4px; transition: background-color 0.2s; }
-.jest-browser-reporter .back-link:hover { background-color: #eef2ff; }
+.jest-browser-reporter { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f5f7fa; padding: 20px; min-height: 100vh; }
+.jest-browser-reporter .back-link { display: inline-flex; align-items: center; margin-bottom: 20px; text-decoration: none; color: #4a6ee0; font-weight: 500; padding: 8px 16px; border-radius: 6px; transition: all 0.2s; border: 1px solid transparent; }
+.jest-browser-reporter .back-link:hover { background-color: #eef2ff; border-color: #4a6ee0; }
 
 /* Test results container */
-.jest-browser-reporter .test-results { background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); overflow: hidden; margin-bottom: 20px; }
+.jest-browser-reporter .test-results { background: white; border-radius: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08); overflow: hidden; margin-bottom: 20px; transition: all 0.3s ease; }
 
 /* Summary section */
-.jest-browser-reporter .test-summary { padding: 20px; background-color: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
-.jest-browser-reporter .summary-stats { display: flex; gap: 20px; }
-.jest-browser-reporter .stat { display: flex; flex-direction: column; align-items: center; }
-.jest-browser-reporter .stat-value { font-size: 24px; font-weight: bold; }
-.jest-browser-reporter .stat-label { font-size: 14px; color: #64748b; }
+.jest-browser-reporter .test-summary { padding: 24px; background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+.jest-browser-reporter .summary-stats { display: flex; gap: 24px; flex-wrap: wrap; }
+.jest-browser-reporter .stat { display: flex; flex-direction: column; align-items: center; padding: 12px 16px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); min-width: 80px; }
+.jest-browser-reporter .stat-value { font-size: 28px; font-weight: 700; line-height: 1; }
+.jest-browser-reporter .stat-label { font-size: 13px; color: #64748b; font-weight: 500; margin-top: 4px; }
 .jest-browser-reporter .pass .stat-value { color: #10b981; }
 .jest-browser-reporter .fail .stat-value { color: #ef4444; }
 .jest-browser-reporter .skip .stat-value { color: #f59e0b; }
 .jest-browser-reporter .total .stat-value { color: #4a6ee0; }
 
-/* Filter & grouping controls */
-.jest-browser-reporter .filter-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.jest-browser-reporter .filter-btn, .jest-browser-reporter .group-toggle-btn { padding: 6px 12px; border: 1px solid #cbd5e1; background: white; border-radius: 4px; cursor: pointer; transition: all 0.2s; }
-.jest-browser-reporter .filter-btn.active, .jest-browser-reporter .group-toggle-btn.active { background: #4a6ee0; color: white; border-color: #4a6ee0; }
+/* Controls section */
+.jest-browser-reporter .controls-container { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-left: auto; }
 
-/* Search input with clear button */
-.jest-browser-reporter .search-container { position: relative; display: inline-block; }
-.jest-browser-reporter .search-input { padding: 6px 30px 6px 10px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 14px; width: 200px; }
-.jest-browser-reporter .search-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 16px; cursor: pointer; color: #94a3b8; padding: 0; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
-.jest-browser-reporter .search-clear:hover { color: #64748b; }
+/* Filter & grouping controls */
+.jest-browser-reporter .filter-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.jest-browser-reporter .filter-btn, .jest-browser-reporter .group-toggle-btn { 
+    padding: 8px 16px; 
+    border: 1px solid #cbd5e1; 
+    background: white; 
+    border-radius: 6px; 
+    cursor: pointer; 
+    font-size: 14px; 
+    font-weight: 500;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.jest-browser-reporter .filter-btn:hover, .jest-browser-reporter .group-toggle-btn:hover { 
+    background: #f8fafc; 
+    border-color: #94a3b8; 
+}
+.jest-browser-reporter .filter-btn.active, .jest-browser-reporter .group-toggle-btn.active { 
+    background: #4a6ee0; 
+    color: white; 
+    border-color: #4a6ee0; 
+}
+
+/* Search input with enhanced styling */
+.jest-browser-reporter .search-container { position: relative; display: inline-flex; align-items: center; }
+.jest-browser-reporter .search-input { 
+    padding: 8px 40px 8px 16px; 
+    border: 1px solid #cbd5e1; 
+    border-radius: 6px; 
+    font-size: 14px; 
+    width: 280px; 
+    transition: all 0.2s;
+    background: white;
+}
+.jest-browser-reporter .search-input:focus { 
+    outline: none; 
+    border-color: #4a6ee0; 
+    box-shadow: 0 0 0 3px rgba(74, 110, 224, 0.1); 
+}
+.jest-browser-reporter .search-input::placeholder { color: #94a3b8; }
+.jest-browser-reporter .search-clear { 
+    position: absolute; 
+    right: 12px; 
+    top: 50%; 
+    transform: translateY(-50%); 
+    background: none; 
+    border: none; 
+    font-size: 18px; 
+    cursor: pointer; 
+    color: #94a3b8; 
+    padding: 0; 
+    width: 20px; 
+    height: 20px; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    border-radius: 50%;
+    transition: all 0.2s;
+}
+.jest-browser-reporter .search-clear:hover { 
+    background: #f1f5f9; 
+    color: #64748b; 
+}
 .jest-browser-reporter .search-clear.hidden { display: none; }
 
-/* Test table */
+/* Test table with enhanced styling */
 .jest-browser-reporter .test-table { width: 100%; border-collapse: collapse; }
-.jest-browser-reporter .test-table th { text-align: left; padding: 12px 16px; background-color: #f1f5f9; font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0; }
-.jest-browser-reporter .test-table td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; }
+.jest-browser-reporter .test-table th { 
+    text-align: left; 
+    padding: 16px 20px; 
+    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); 
+    font-weight: 600; 
+    color: #475569; 
+    border-bottom: 2px solid #e2e8f0; 
+    font-size: 14px;
+}
+.jest-browser-reporter .test-table td { 
+    padding: 16px 20px; 
+    border-bottom: 1px solid #f1f5f9; 
+    vertical-align: top;
+}
 .jest-browser-reporter .test-table tr:last-child td { border-bottom: none; }
 .jest-browser-reporter .test-table tr:hover { background-color: #f8fafc; }
 
-/* Status indicators */
-.jest-browser-reporter .status-indicator { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 4px; font-size: 14px; font-weight: 500; }
-.jest-browser-reporter .status-pass { background-color: #d1fae5; color: #065f46; }
-.jest-browser-reporter .status-fail { background-color: #fee2e2; color: #991b1b; }
-.jest-browser-reporter .status-skip { background-color: #fef3c7; color: #92400e; }
+/* Enhanced status indicators */
+.jest-browser-reporter .status-indicator { 
+    display: inline-flex; 
+    align-items: center; 
+    gap: 8px; 
+    padding: 6px 12px; 
+    border-radius: 6px; 
+    font-size: 13px; 
+    font-weight: 600; 
+    border: 1px solid transparent;
+}
+.jest-browser-reporter .status-pass { 
+    background-color: #d1fae5; 
+    color: #065f46; 
+    border-color: #a7f3d0;
+}
+.jest-browser-reporter .status-fail { 
+    background-color: #fee2e2; 
+    color: #991b1b; 
+    border-color: #fca5a5;
+}
+.jest-browser-reporter .status-skip { 
+    background-color: #fef3c7; 
+    color: #92400e; 
+    border-color: #fcd34d;
+}
 
-/* Test path styling */
-.jest-browser-reporter .test-path { color: #64748b; font-size: 13px; }
-.jest-browser-reporter .test-name { font-weight: 600; margin-top: 4px; }
+/* Enhanced test information styling */
+.jest-browser-reporter .test-info { flex: 1; min-width: 0; }
+.jest-browser-reporter .test-path { 
+    color: #64748b; 
+    font-size: 13px; 
+    margin-bottom: 4px;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+.jest-browser-reporter .test-name { 
+    font-weight: 600; 
+    margin-bottom: 8px; 
+    font-size: 15px;
+    color: #1e293b;
+}
 
-/* Error details */
-.jest-browser-reporter .error-details { display: none; margin-top: 10px; padding: 10px; background-color: #fef2f2; border-radius: 4px; border-left: 4px solid #ef4444; }
-.jest-browser-reporter .error-details pre { white-space: pre-wrap; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; color: #991b1b; overflow-x: auto; }
-.jest-browser-reporter .toggle-error { background: none; border: none; color: #4a6ee0; cursor: pointer; font-size: 14px; padding: 0; margin-top: 5px; }
+/* Enhanced error details */
+.jest-browser-reporter .error-details { 
+    display: none; 
+    margin-top: 12px; 
+    padding: 12px; 
+    background-color: #fef2f2; 
+    border-radius: 6px; 
+    border-left: 4px solid #ef4444; 
+}
+.jest-browser-reporter .error-details pre { 
+    white-space: pre-wrap; 
+    font-family: 'Consolas', 'Monaco', monospace; 
+    font-size: 13px; 
+    color: #991b1b; 
+    overflow-x: auto; 
+    line-height: 1.4;
+}
+.jest-browser-reporter .toggle-error { 
+    background: none; 
+    border: none; 
+    color: #4a6ee0; 
+    cursor: pointer; 
+    font-size: 13px; 
+    padding: 4px 0; 
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
 .jest-browser-reporter .toggle-error:hover { text-decoration: underline; }
 
-/* Grouping */
-.jest-browser-reporter .group-header { background: #f1f5f9; font-weight: 700; cursor: pointer; }
-.jest-browser-reporter .group-meta { color: #64748b; font-weight: 500; font-size: 13px; margin-left: 8px; }
+/* Enhanced grouping */
+.jest-browser-reporter .group-header { 
+    background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%); 
+    font-weight: 700; 
+    cursor: pointer; 
+    transition: background-color 0.2s;
+}
+.jest-browser-reporter .group-header:hover { background: #e2e8f0; }
+.jest-browser-reporter .group-meta { 
+    color: #64748b; 
+    font-weight: 500; 
+    font-size: 13px; 
+    margin-left: 8px; 
+    font-style: italic;
+}
+.jest-browser-reporter .group-title { color: #1e293b; }
 
-/* Duration indicator */
-.jest-browser-reporter .duration { color: #64748b; font-size: 14px; }
+/* Enhanced duration indicator */
+.jest-browser-reporter .duration { 
+    color: #64748b; 
+    font-size: 14px; 
+    font-weight: 500;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
 .jest-browser-reporter .duration.skipped { color: #94a3b8; font-style: italic; }
 
-/* Running indicator styles */
+/* Enhanced running indicator */
 .jest-browser-reporter .running-indicator {
-    padding: 20px;
+    padding: 24px;
     text-align: center;
     background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     margin-bottom: 20px;
     font-size: 16px;
     color: #4a6ee0;
-    font-weight: 500;
+    font-weight: 600;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: 12px;
+    border: 2px dashed #e2e8f0;
 }
-.jest-browser-reporter .running-indicator.hidden {
-    display: none;
-}
+.jest-browser-reporter .running-indicator.hidden { display: none; }
 
 .jest-browser-reporter .running-spinner {
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
     border: 3px solid #f3f3f3;
     border-top: 3px solid #4a6ee0;
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
 
-/* Hide test results when running indicator is active */
-.jest-browser-reporter .test-results.hidden {
-    display: none;
+/* Enhanced run buttons */
+.jest-browser-reporter .run-btn {
+    padding: 6px 12px;
+    border: 1px solid #cbd5e1;
+    background: white;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #475569;
+    text-decoration: none;
+}
+.jest-browser-reporter .run-btn:hover {
+    background: #4a6ee0;
+    color: white;
+    border-color: #4a6ee0;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(74, 110, 224, 0.3);
+}
+.jest-browser-reporter .run-btn:active {
+    transform: translateY(0);
+}
+.jest-browser-reporter .run-btn.running {
+    background: #f59e0b;
+    color: white;
+    border-color: #f59e0b;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.jest-browser-reporter .run-all-btn {
+    padding: 8px 16px;
+    border: 1px solid #4a6ee0;
+    background: #4a6ee0;
+    color: white;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.jest-browser-reporter .run-all-btn:hover {
+    background: #374acb;
+    border-color: #374acb;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(74, 110, 224, 0.3);
+}
+.jest-browser-reporter .run-all-btn:active {
+    transform: translateY(0);
+}
+.jest-browser-reporter .run-all-btn.running {
+    background: #f59e0b;
+    border-color: #f59e0b;
+    cursor: not-allowed;
+}
+
+/* Test actions container */
+.jest-browser-reporter .test-actions {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+/* Enhanced row layout */
+.jest-browser-reporter .test-row-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.jest-browser-reporter .test-main-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.jest-browser-reporter .test-side-content {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    min-width: 140px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .jest-browser-reporter { padding: 12px; }
+    .jest-browser-reporter .test-summary { padding: 16px; flex-direction: column; align-items: stretch; }
+    .jest-browser-reporter .controls-container { margin-left: 0; justify-content: center; }
+    .jest-browser-reporter .summary-stats { justify-content: center; }
+    .jest-browser-reporter .search-input { width: 100%; max-width: 300px; }
+    .jest-browser-reporter .test-table th, 
+    .jest-browser-reporter .test-table td { padding: 12px; }
+    .jest-browser-reporter .test-row-content { flex-direction: column; gap: 12px; }
+    .jest-browser-reporter .test-side-content { align-items: stretch; width: 100%; }
+    .jest-browser-reporter .run-btn { justify-content: center; }
+}
+
+/* Keyboard shortcut hint */
+.jest-browser-reporter .keyboard-hint {
+    font-size: 11px;
+    color: #94a3b8;
+    margin-left: 4px;
+    font-weight: normal;
+}
+
+/* Empty state */
+.jest-browser-reporter .empty-state {
+    padding: 40px 20px;
+    text-align: center;
+    color: #64748b;
+    font-size: 16px;
 }
 
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+}
+
+/* Focus styles for accessibility */
+.jest-browser-reporter button:focus-visible {
+    outline: 2px solid #4a6ee0;
+    outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+    .jest-browser-reporter .run-btn,
+    .jest-browser-reporter .run-all-btn,
+    .jest-browser-reporter .back-link,
+    .jest-browser-reporter .filter-controls {
+        display: none !important;
+    }
+    
+    .jest-browser-reporter {
+        background: white;
+        padding: 0;
+    }
+    
+    .jest-browser-reporter .test-results {
+        box-shadow: none;
+        border: 1px solid #ccc;
+    }
 }
 `;
 
@@ -122,6 +414,7 @@ export class JestBrowserReporter {
     currentFilter: string;
     currentSearch: string;
     groupBySuite: boolean;
+    isRunning: boolean;
     elements: {
         container: HTMLElement;
         summary: Element | null;
@@ -131,6 +424,7 @@ export class JestBrowserReporter {
     } | undefined;
     private searchHandler?: (e: Event) => void;
     private clearHandler?: (e: Event) => void;
+    private keydownHandler?: (e: KeyboardEvent) => void;
 
     constructor(options: JestBrowserReporterOptions) {
         this.options = options || {} as any;
@@ -139,76 +433,98 @@ export class JestBrowserReporter {
         this.currentFilter = 'all';
         this.currentSearch = '';
         this.groupBySuite = !!options.groupBySuite;
+        this.isRunning = false;
 
-        // Show running indicator immediately when reporter is created
         this.init();
-        this.showRunningIndicator();
+
+        // Auto-run if enabled
+        if (this.options.autoRun) {
+            setTimeout(() => this.run(), 100);
+        } else {
+            this.showRunningIndicator('Ready to run tests - click "Run All" to start');
+        }
     }
 
     /**
-     * Asynchronously runs Jest Lite tests with optional name-based filtering and handles result rendering.
-     * 
-     * This method provides a complete test execution lifecycle:
-     * - Applies optional test name filtering before execution
-     * - Displays a running indicator during test execution
-     * - Executes all matching tests via Jest Lite test runner
-     * - Automatically renders results upon successful completion
-     * - Handles errors gracefully with console logging
-     * - Ensures running indicator is hidden regardless of outcome
-     * 
-     * @param {string} [testNameFilter] - Optional filter string to run only tests whose names contain this substring.
-     *   If provided, only tests with matching names will be executed. If omitted or undefined, all tests run.
-     * 
-     * @returns {Promise<any>} Promise that resolves with test results array when execution completes successfully,
-     *   or resolves with empty array on failure. The promise never rejects due to internal error handling.
-     * 
-     * @throws {Error} Only throws errors related to parameter validation, not test execution errors
-     * 
-     * @example
-     * // Run all tests
-     * const reporter = new JestBrowserReporter({ container: document.getElementById('root') });
-     * const results = await reporter.run();
-     * console.log(`Total tests: ${results.length}`);
-     * 
-     * @example
-     * // Run only tests containing "login" in their names
-     * const results = await reporter.run('login');
-     * console.log(`Filtered tests: ${results.length}`);
-     * 
-     * @example
-     * // Handle execution with promise chain
-     * reporter.run('api')
-     *   .then(results => {
-     *     console.log('API tests completed:', results);
-     *   })
-     *   .catch(error => {
-     *     // Note: This catch only handles parameter validation errors, not test failures
-     *     console.error('Execution setup failed:', error);
-     *   });
-     * 
-     * @see {@link JestBrowserReporter.render} For result rendering details
-     * @see {@link JestBrowserReporter.showRunningIndicator} For UI indicator implementation
+     * Asynchronously runs Jest Lite tests with enhanced UI feedback
      */
     public async run(testNameFilter?: string): Promise<any> {
-        (globalThis as any).__JESTLITE_TEST_NAME_FILTER__ = testNameFilter || undefined; //TBD: add support in JestLite
-        alert((globalThis as any).__JESTLITE_TEST_NAME_FILTER__);
-        this.showRunningIndicator();
+        if (this.isRunning) {
+            console.warn('Tests are already running');
+            return [];
+        }
+
+        this.isRunning = true;
+        this.updateRunButtonsState(true);
+
+        (globalThis as any).__JESTLITE_TEST_NAME_FILTER__ = testNameFilter || undefined;
+        this.showRunningIndicator(testNameFilter ? `Running tests matching: "${testNameFilter}"` : 'Running all tests...');
+
         try {
-            const results = await runJestLite()
+            const results = await runJestLite();
             this.render(results);
             return results;
         } catch (ex) {
             console.error('Test execution failed:', ex);
+            this.showError('Test execution failed: ' + (ex instanceof Error ? ex.message : String(ex)));
             return [];
         } finally {
+            this.isRunning = false;
+            this.updateRunButtonsState(false);
             this.hideRunningIndicator();
         }
     }
 
+    /**
+     * Show error message in the UI
+     */
+    private showError(message: string) {
+        if (!this.elements?.container) return;
+
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'running-indicator';
+        errorDiv.style.background = '#fef2f2';
+        errorDiv.style.borderColor = '#fecaca';
+        errorDiv.style.color = '#dc2626';
+        errorDiv.innerHTML = `
+            <span style="font-size: 24px;">⚠️</span>
+            <span>${this.escapeHtml(message)}</span>
+        `;
+
+        const existingIndicator = this.elements.container.querySelector('.running-indicator');
+        if (existingIndicator) {
+            existingIndicator.replaceWith(errorDiv);
+        } else {
+            this.elements.container.insertBefore(errorDiv, this.elements.container.firstChild);
+        }
+    }
 
     /**
-     * Show running indicator with custom message and hide test results
-     * @param message - The message to display (default: 'Running tests…')
+     * Update state of all run buttons
+     */
+    private updateRunButtonsState(running: boolean) {
+        if (!this.elements?.container) return;
+
+        const buttons = this.elements.container.querySelectorAll('.run-btn, .run-all-btn');
+        buttons.forEach(btn => {
+            if (running) {
+                btn.classList.add('running');
+                btn.innerHTML = btn.classList.contains('run-all-btn')
+                    ? '⏳ Running...'
+                    : '⏳';
+            } else {
+                btn.classList.remove('running');
+                if (btn.classList.contains('run-all-btn')) {
+                    btn.innerHTML = '▶️ Run All';
+                } else {
+                    btn.innerHTML = '▶️ Run';
+                }
+            }
+        });
+    }
+
+    /**
+     * Show running indicator with custom message
      */
     private showRunningIndicator(message: string = 'Running tests…') {
         if (!this.elements || !this.elements.container) return;
@@ -217,7 +533,6 @@ export class JestBrowserReporter {
         if (!indicator) {
             indicator = document.createElement('div');
             indicator.className = 'running-indicator';
-            // Insert after back-link if present, otherwise at the beginning
             const backLink = this.elements.container.querySelector('.back-link');
             if (backLink && backLink.nextSibling) {
                 this.elements.container.insertBefore(indicator, backLink.nextSibling);
@@ -232,7 +547,6 @@ export class JestBrowserReporter {
         `;
         indicator.classList.remove('hidden');
 
-        // Hide test results UI while tests are running
         const testResults = this.elements.container.querySelector('.test-results') as HTMLElement | null;
         if (testResults) {
             testResults.classList.add('hidden');
@@ -245,13 +559,11 @@ export class JestBrowserReporter {
     private hideRunningIndicator() {
         if (!this.elements || !this.elements.container) return;
 
-        // Hide running indicator
         const indicator = this.elements.container.querySelector('.running-indicator') as HTMLElement | null;
         if (indicator) {
             indicator.classList.add('hidden');
         }
 
-        // Show test results UI
         const testResults = this.elements.container.querySelector('.test-results') as HTMLElement | null;
         if (testResults) {
             testResults.classList.remove('hidden');
@@ -263,6 +575,7 @@ export class JestBrowserReporter {
         this.injectStyles();
         this.createHTMLStructure();
         this.setupEventListeners();
+        this.setupKeyboardShortcuts();
     }
 
     private injectStyles() {
@@ -288,12 +601,13 @@ export class JestBrowserReporter {
             searchClear: container.querySelector('.search-clear') as HTMLElement | null
         };
 
-        // Delegated listeners
         this.attachDelegatedListeners(container);
     }
 
     private generateHTML() {
-        const backLink = this.options.showBackLink ? '<a href="javascript:history.back()" class="back-link">&larr; Back</a>' : '';
+        const backLink = this.options.showBackLink ?
+            '<a href="javascript:history.back()" class="back-link">← Back to Previous Page</a>' : '';
+
         return `
             ${backLink}
             <div class="test-results">
@@ -304,34 +618,78 @@ export class JestBrowserReporter {
                         <div class="stat fail"><span class="stat-value">0</span><span class="stat-label">Failed</span></div>
                         <div class="stat skip"><span class="stat-value">0</span><span class="stat-label">Skipped</span></div>
                     </div>
-                    <div class="filter-controls">
-                        <div class="search-container">
-                            <input type="text" class="search-input" placeholder="Search tests…" />
-                            <button class="search-clear hidden" type="button">&times;</button>
+                    <div class="controls-container">
+                        <div class="filter-controls">
+                            <div class="search-container">
+                                <input type="text" class="search-input" placeholder="Search tests…" />
+                                <button class="search-clear hidden" type="button" title="Clear search">×</button>
+                            </div>
+                            <button class="filter-btn active" data-filter="all">All</button>
+                            <button class="filter-btn" data-filter="pass">Passed</button>
+                            <button class="filter-btn" data-filter="fail">Failed</button>
+                            <button class="filter-btn" data-filter="skip">Skipped</button>
+                            <button class="group-toggle-btn ${this.groupBySuite ? 'active' : ''}" data-group-by="suite">Group by Suite</button>
                         </div>
-                        <button class="filter-btn active" data-filter="all">All</button>
-                        <button class="filter-btn" data-filter="pass">Passed</button>
-                        <button class="filter-btn" data-filter="fail">Failed</button>
-                        <button class="filter-btn" data-filter="skip">Skipped</button>
-                        <button class="group-toggle-btn ${this.groupBySuite ? 'active' : ''}" data-group-by="suite">Group by Suite</button>
+                        <button class="run-all-btn" data-action="run-all" title="Run all tests (Ctrl+Enter)">
+                            ▶️ Run All
+                        </button>
                     </div>
                 </div>
 
                 <table class="test-table">
                     <thead>
                         <tr>
-                            <th width="120px">Status</th>
-                            <th>Test</th>
-                            <th width="120px">Duration</th>
+                            <th width="140px">Status</th>
+                            <th>Test Details</th>
+                            <th width="140px">Duration</th>
                         </tr>
                     </thead>
-                    <tbody id="test-results-body"></tbody>
+                    <tbody id="test-results-body">
+                        <tr>
+                            <td colspan="3" class="empty-state">No test results yet. Click "Run All" to start testing.</td>
+                        </tr>
+                    </tbody>
                 </table>
             </div>
         `;
     }
 
-    // Attach event listeners for filters/search (re-attached after summary re-render)
+    // Setup keyboard shortcuts
+    private setupKeyboardShortcuts() {
+        if (!this.elements?.container) return;
+
+        this.keydownHandler = (e: KeyboardEvent) => {
+            // Ctrl+F or Cmd+F for search
+            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                e.preventDefault();
+                this.elements?.searchInput?.focus();
+                return;
+            }
+
+            // Escape to clear search
+            if (e.key === 'Escape' && this.elements?.searchInput) {
+                if (this.elements.searchInput.value) {
+                    this.onClearSearch();
+                } else {
+                    this.elements.searchInput.blur();
+                }
+                return;
+            }
+
+            // Ctrl+Enter to run all tests
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                if (!this.isRunning) {
+                    this.run();
+                }
+                return;
+            }
+        };
+
+        document.addEventListener('keydown', this.keydownHandler);
+    }
+
+    // Attach event listeners for filters/search
     private setupEventListeners() {
         if (!this.elements) return;
 
@@ -361,7 +719,6 @@ export class JestBrowserReporter {
                 this.applyFilter();
             }, 180);
             this.elements.searchInput.addEventListener('input', this.searchHandler);
-            // restore value
             this.elements.searchInput.value = this.currentSearch || '';
         }
 
@@ -403,8 +760,6 @@ export class JestBrowserReporter {
         this.currentSearch = '';
         this.updateClearButtonVisibility();
         this.applyFilter();
-
-        // Focus back to input after clear
         this.elements.searchInput.focus();
     }
 
@@ -419,35 +774,64 @@ export class JestBrowserReporter {
         }
     }
 
-    // Delegated click handling for error toggles and group header toggles
+    // Delegated click handling
     private attachDelegatedListeners(container: HTMLElement) {
         container.addEventListener('click', (ev) => {
-            // Toggle error details
-            const btn = (ev.target as HTMLElement).closest('.toggle-error') as HTMLElement | null;
-            if (btn) {
-                const details = btn.nextElementSibling as HTMLElement | null;
-                if (details) {
-                    const isVisible = details.style.display === 'block';
-                    details.style.display = isVisible ? 'none' : 'block';
-                    btn.textContent = isVisible ? 'Show Error Details' : 'Hide Error Details';
+            const target = ev.target as HTMLElement;
+
+            // Run single test
+            if (target.matches('.run-btn[data-action="run-test"]')) {
+                const testName = target.getAttribute('data-test-name') || '';
+                if (testName && !this.isRunning) {
+                    this.run(testName);
                 }
                 ev.preventDefault();
                 return;
             }
 
-            // Toggle only the rows of the clicked group header
-            const header = (ev.target as HTMLElement).closest('.group-header') as HTMLElement | null;
+            // Run all tests
+            if (target.matches('.run-all-btn[data-action="run-all"]')) {
+                if (!this.isRunning) {
+                    this.run();
+                }
+                ev.preventDefault();
+                return;
+            }
+
+            // Toggle error details - FIXED VERSION
+            const btn = target.closest('.toggle-error') as HTMLElement | null;
+            if (btn) {
+                // Find the error details within the same table cell
+                const cell = btn.closest('td');
+                if (cell) {
+                    const details = cell.querySelector('.error-details') as HTMLElement | null;
+                    if (details) {
+                        const isVisible = details.style.display === 'block';
+                        details.style.display = isVisible ? 'none' : 'block';
+                        btn.innerHTML = isVisible ?
+                            '🔽 Show Error Details' :
+                            '🔼 Hide Error Details';
+                    }
+                }
+                ev.preventDefault();
+                return;
+            }
+
+            // Toggle group rows
+            const header = target.closest('.group-header') as HTMLElement | null;
             if (header) {
                 const groupKey = header.getAttribute('data-group') || '';
-                // toggle collapsed state on this header
                 const collapsed = header.getAttribute('data-collapsed') === 'true';
                 header.setAttribute('data-collapsed', (!collapsed).toString());
-
-                // find rows that belong to this group and toggle only them
                 const safeSelector = this.escapeForSelector(groupKey);
                 const rows = Array.from(container.querySelectorAll(`tr.group-row[data-group="${safeSelector}"]`)) as HTMLElement[];
                 rows.forEach(r => r.style.display = collapsed ? '' : 'none');
 
+                // Update header icon
+                const icon = header.querySelector('.group-icon') as HTMLElement;
+                if (icon) {
+                    icon.textContent = collapsed ? '🔽' : '▶️';
+                }
                 ev.preventDefault();
                 return;
             }
@@ -455,20 +839,16 @@ export class JestBrowserReporter {
     }
 
     /**
-     * Render test results into the reporter and automatically hide running indicator
-     * @param results - Array of test results to display
+     * Render test results into the reporter
      */
     render(results: any[]) {
         this.results = results || [];
-
-        // Automatically hide running indicator and show test results
         this.hideRunningIndicator();
-
         this.updateSummary();
         this.renderTable();
     }
 
-    // Update summary area (re-renders the controls area which contains the search input)
+    // Update summary area
     private updateSummary() {
         const total = this.results.length;
         const pass = this.results.filter(t => t.status === 'pass').length;
@@ -477,16 +857,17 @@ export class JestBrowserReporter {
 
         if (!this.elements || !this.elements.summary) return;
         this.elements.summary.innerHTML = `
-            <div class="summary-stats">
-                <div class="stat total"><span class="stat-value">${total}</span><span class="stat-label">Total</span></div>
-                <div class="stat pass"><span class="stat-value">${pass}</span><span class="stat-label">Passed</span></div>
-                <div class="stat fail"><span class="stat-value">${fail}</span><span class="stat-label">Failed</span></div>
-                <div class="stat skip"><span class="stat-value">${skip}</span><span class="stat-label">Skipped</span></div>
-            </div>
+        <div class="summary-stats">
+            <div class="stat total"><span class="stat-value">${total}</span><span class="stat-label">Total</span></div>
+            <div class="stat pass"><span class="stat-value">${pass}</span><span class="stat-label">Passed</span></div>
+            <div class="stat fail"><span class="stat-value">${fail}</span><span class="stat-label">Failed</span></div>
+            <div class="stat skip"><span class="stat-value">${skip}</span><span class="stat-label">Skipped</span></div>
+        </div>
+        <div class="controls-container">
             <div class="filter-controls">
                 <div class="search-container">
                     <input type="text" class="search-input" placeholder="Search tests…" value="${this.escapeHtml(this.currentSearch)}"/>
-                    <button class="search-clear ${this.currentSearch ? '' : 'hidden'}" type="button">&times;</button>
+                    <button class="search-clear ${this.currentSearch ? '' : 'hidden'}" type="button" title="Clear search">×</button>
                 </div>
                 <button class="filter-btn ${this.currentFilter === 'all' ? 'active' : ''}" data-filter="all">All</button>
                 <button class="filter-btn ${this.currentFilter === 'pass' ? 'active' : ''}" data-filter="pass">Passed</button>
@@ -494,21 +875,36 @@ export class JestBrowserReporter {
                 <button class="filter-btn ${this.currentFilter === 'skip' ? 'active' : ''}" data-filter="skip">Skipped</button>
                 <button class="group-toggle-btn ${this.groupBySuite ? 'active' : ''}" data-group-by="suite">Group by Suite</button>
             </div>
-        `;
-        // update references and reattach listeners
+            <button class="run-all-btn" data-action="run-all" title="Run all tests (Ctrl+Enter)">
+                ▶️ Run All
+            </button>
+        </div>
+    `;
+
         if (this.elements && this.elements.container) {
             this.elements.summary = this.elements.container.querySelector('.test-summary');
             this.elements.tableBody = this.elements.container.querySelector('#test-results-body');
-            this.elements.searchInput = this.elements.summary ? this.elements.summary.querySelector('.search-input') as HTMLInputElement | null : null;
-            this.elements.searchClear = this.elements.summary ? this.elements.summary.querySelector('.search-clear') as HTMLElement | null : null;
+            this.elements.searchInput = this.elements.summary?.querySelector('.search-input') as HTMLInputElement | null;
+            this.elements.searchClear = this.elements.summary?.querySelector('.search-clear') as HTMLElement | null;
         }
         this.setupEventListeners();
     }
 
-    // Render table rows; when grouped, produce header + rows (no nested tbody)
+    // Render table rows
     private renderTable() {
         if (!this.elements?.tableBody) return;
         const tbody = this.elements.tableBody as HTMLElement;
+
+        if (this.results.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="3" class="empty-state">
+                        No tests found. Check your test configuration.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
 
         if (!this.groupBySuite) {
             tbody.innerHTML = this.results.map((test, index) => this.generateTestRow(test, index)).join('');
@@ -529,16 +925,17 @@ export class JestBrowserReporter {
             const pass = tests.filter(t => t.status === 'pass').length;
             const fail = tests.filter(t => t.status === 'fail').length;
             const skip = tests.filter(t => t.status === 'skip').length;
-            // group header (store data-group to identify rows)
+
             html += `
                 <tr class="group-header" data-group="${this.escapeHtml(groupKey)}" data-collapsed="false">
                     <td colspan="3">
+                        <span class="group-icon">🔽</span>
                         <span class="group-title">${this.escapeHtml(groupKey)}</span>
                         <span class="group-meta"> — ${tests.length} tests (${pass} passed, ${fail} failed, ${skip} skipped)</span>
                     </td>
                 </tr>
             `;
-            // individual rows
+
             tests.forEach((t, idx) => {
                 html += this.generateTestRow(t, idx, groupKey);
             });
@@ -548,56 +945,65 @@ export class JestBrowserReporter {
         this.applyFilter();
     }
 
-    // Single test row generator; includes a data-search attribute (lowercased)
+    // Single test row generator
     private generateTestRow(test: any, index: any, groupKey?: string) {
         const statusClass = `status-${test.status}`;
-        const statusIcons: any = {
-            'pass': '✅',
-            'fail': '❌',
-            'skip': '⏭️'
-        };
-        const statusTexts: any = {
-            'pass': 'PASS',
-            'fail': 'FAIL',
-            'skip': 'SKIP'
-        };
+        const statusIcons: any = { 'pass': '✅', 'fail': '❌', 'skip': '⏭️' };
+        const statusTexts: any = { 'pass': 'PASS', 'fail': 'FAIL', 'skip': 'SKIP' };
         const statusIcon = statusIcons[test.status] || '❓';
         const statusText = statusTexts[test.status] || test.status.toUpperCase();
 
         const sanitizedPath = this.sanitizePath(test.testPath);
-        const displayPath = sanitizedPath.length ? sanitizedPath.join(' > ') : (test.name || 'Unnamed Test');
+        const displayPath = sanitizedPath.length ? sanitizedPath.join(' › ') : (test.name || 'Unnamed Test');
         const testName = (test.name || (sanitizedPath[sanitizedPath.length - 1]) || 'Unnamed Test');
 
         const errorHtml = test.status === 'fail' && test.errors?.length ? `
-        <button class="toggle-error">Show Error Details</button>
+        <div class="test-actions">
+            <button class="toggle-error">🔽 Show Error Details</button>
+        </div>
         <div class="error-details"><pre>${this.escapeHtml(test.errors.join('\n\n'))}</pre></div>
-    ` : '';       
-        
+    ` : '';
+
         const durationHtml = test.status === 'skip'
             ? '<span class="duration skipped">-</span>'
             : `<span class="duration">${this.escapeHtml(String(test.duration || 0))}ms</span>`;
 
         const searchValue = this.escapeHtml((testName + ' ' + displayPath).toLowerCase());
+
         return `
-        <tr class="group-row" data-status="${this.escapeHtml(test.status)}" data-group="${this.escapeHtml(groupKey || '')}" data-search="${searchValue}">
-            <td><span class="status-indicator ${statusClass}">${statusIcon} ${statusText}</span></td>
-            <td>
+<tr class="group-row" data-status="${this.escapeHtml(test.status)}" 
+    data-group="${this.escapeHtml(groupKey || '')}" 
+    data-search="${searchValue}">
+    <td>
+        <span class="status-indicator ${statusClass}">${statusIcon} ${statusText}</span>
+    </td>
+    <td>
+        <div class="test-row-content">
+            <div class="test-main-content">
                 <div class="test-path">${this.escapeHtml(displayPath)}</div>
                 <div class="test-name">${this.escapeHtml(testName)}</div>
                 ${errorHtml}
-            </td>
-            <td>${durationHtml}</td>
-        </tr>
-    `;
+            </div>
+            <div class="test-side-content">
+                ${durationHtml}
+                <button class="run-btn" data-action="run-test" data-test-name="${this.escapeHtml(testName)}" 
+                        title="Run this test individually">
+                    ▶️ Run
+                </button>
+            </div>
+        </div>
+    </td>
+    <td></td> <!-- Empty cell for alignment -->
+</tr>
+`;
     }
 
-    // Apply filters and search; updates group meta counts and header visibility
+    // Apply filters and search
     private applyFilter() {
         if (!this.elements?.tableBody) return;
         const container = this.elements.tableBody;
         const rowsAll = Array.from(container.querySelectorAll('tr.group-row')) as HTMLElement[];
 
-        // If not grouped, simply toggle rows
         const hasGroupHeaders = !!container.querySelector('tr.group-header');
         if (!hasGroupHeaders) {
             rowsAll.forEach(row => {
@@ -610,7 +1016,6 @@ export class JestBrowserReporter {
             return;
         }
 
-        // grouped: process each header and its rows
         const headers = Array.from(container.querySelectorAll('tr.group-header')) as HTMLElement[];
         headers.forEach(header => {
             const groupKey = header.getAttribute('data-group') || '';
@@ -629,7 +1034,6 @@ export class JestBrowserReporter {
                 const shouldShow = matchesFilter && matchesSearch;
                 const collapsed = header.getAttribute('data-collapsed') === 'true';
 
-                // If header collapsed, hide rows regardless of search/filter (but still compute counts)
                 row.style.display = collapsed ? 'none' : (shouldShow ? '' : 'none');
 
                 if (shouldShow) {
@@ -640,7 +1044,6 @@ export class JestBrowserReporter {
                 }
             });
 
-            // Update header meta and visibility
             const meta = header.querySelector('.group-meta') as HTMLElement | null;
             if (meta) meta.textContent = ` — ${visibleCount} tests (${passed} passed, ${failed} failed, ${skipped} skipped)`;
             header.style.display = visibleCount > 0 ? '' : 'none';
@@ -653,7 +1056,7 @@ export class JestBrowserReporter {
         return path.filter((p: string) => !!p && p !== 'ROOT_DESCRIBE_BLOCK');
     }
 
-    // Decide a group key for a test (first non-root describe)
+    // Decide a group key for a test
     private getGroupKey(test: any): string {
         const sanitized = this.sanitizePath(test.testPath);
         if (sanitized.length >= 2) {
@@ -663,7 +1066,7 @@ export class JestBrowserReporter {
             return sanitized[0];
         }
         if (test.testPath && Array.isArray(test.testPath) && test.testPath.length) {
-            return String(test.testPath.join(' > '));
+            return String(test.testPath.join(' › '));
         }
         return test.name || 'Ungrouped';
     }
@@ -679,7 +1082,7 @@ export class JestBrowserReporter {
             .replace(/'/g, '&#39;');
     }
 
-    // Escape string for use inside attribute selector (basic)
+    // Escape string for use inside attribute selector
     private escapeForSelector(value: string) {
         if (!value) return '';
         return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -697,12 +1100,16 @@ export class JestBrowserReporter {
         };
     }
 
-    // Remove UI
+    // Cleanup method
     destroy() {
-        this.dipose();
+        this.dispose();
     }
 
-    private dipose() {
+    private dispose() {
+        if (this.keydownHandler) {
+            document.removeEventListener('keydown', this.keydownHandler);
+        }
+
         if (!this.elements || !this.elements.container) return;
         if (this.elements.container.parentNode) {
             this.elements.container.parentNode.removeChild(this.elements.container);

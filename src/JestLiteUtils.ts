@@ -1,4 +1,4 @@
-import jestLite from './jestLite';
+import jestLite from './jestLiteFixed';
 
 /**
  * Setup Jest Lite functions as globals to run tests
