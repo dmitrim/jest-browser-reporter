@@ -8179,20 +8179,23 @@ ${d}` : "") + h.replace(/AssertionError(.*)/g, "");
 
             //dma: added support for .skip and .only for describe blocks>>
 
-            const c = (s = i(function* (e2) {
+            const c = (s = i(function* runDescribe(e2) {
                 const state = (0, r.getState)();
 
                 const hasOwnOnlyTests = e2.tests.some(t => t.mode === "only");
                 const isRoot = !e2.parent;
 
+                // Skip logic: if the block is .skip or ignored due to .only/focused tests
                 if (!isRoot && (e2.mode === "skip" || (state.hasFocusedTests && !hasOwnOnlyTests && e2.mode !== "only"))) {
                     (0, r.dispatch)({ describeBlock: e2, name: "run_describe_start" });
 
                     function markSkipped(block) {
-                        for (const t3 of block.tests)
+                        for (const t3 of block.tests) {
                             (0, r.dispatch)({ name: "test_skip", test: t3 });
-                        for (const ch of block.children)
+                        }
+                        for (const ch of block.children) {
                             markSkipped(ch);
+                        }
                     }
 
                     markSkipped(e2);
@@ -8203,14 +8206,74 @@ ${d}` : "") + h.replace(/AssertionError(.*)/g, "");
 
                 (0, r.dispatch)({ describeBlock: e2, name: "run_describe_start" });
                 const hooks = (0, o.getAllHooksForDescribe)(e2);
-                for (const h of hooks.beforeAll)
-                    p(h);
-                for (const t3 of e2.tests)
+
+                // Helper: call a hook and return a Promise
+                function callHook(hook) {
+                    if (!hook?.fn) return Promise.resolve();
+
+                    try {
+                        const result = hook.fn();
+                        if (result && typeof result.then === "function") {
+                            return result; // Return the Promise for yield
+                        }
+                        return Promise.resolve();
+                    } catch (err) {
+                        (0, r.dispatch)({ error: err, hook, name: "hook_failure" });
+                        return Promise.reject(err);
+                    }
+                }
+
+                // Run beforeAll hooks sequentially
+                if (hooks.beforeAll) {
+                    for (const h of hooks.beforeAll) {
+                        try {
+                            yield callHook(h);
+                        } catch (err) {
+                            // Mark all tests in this describe as failed
+                            for (const t3 of e2.tests) {
+                                (0, r.dispatch)({ error: err, test: t3, name: "test_failure" });
+                            }
+                            // Recursively mark child describe blocks as skipped
+                            function markChildrenSkipped(block) {
+                                for (const child of block.children) {
+                                    for (const t of child.tests) {
+                                        (0, r.dispatch)({ name: "test_skip", test: t });
+                                    }
+                                    markChildrenSkipped(child);
+                                }
+                            }
+                            markChildrenSkipped(e2);
+
+                            // Finish this describe block and stop execution
+                            (0, r.dispatch)({ describeBlock: e2, name: "run_describe_finish" });
+                            return;
+                        }
+                    }
+                }
+
+                // Run all tests in this describe block
+                for (const t3 of e2.tests) {
+                    // Each test internally handles its own beforeEach/afterEach hooks
                     yield f(t3);
-                for (const t3 of e2.children)
+                }
+
+                // Recursively run child describe blocks
+                for (const t3 of e2.children) {
                     yield c(t3);
-                for (const h of hooks.afterAll)
-                    p(h);
+                }
+
+                // Run afterAll hooks sequentially
+                if (hooks.afterAll) {
+                    for (const h of hooks.afterAll) {
+                        // Catch errors in afterAll so other hooks/blocks continue
+                        try {
+                            yield callHook(h);
+                        } catch (err) {
+                            (0, r.dispatch)({ error: err, hook: h, name: "hook_failure" });
+                        }
+                    }
+                }
+
                 (0, r.dispatch)({ describeBlock: e2, name: "run_describe_finish" });
             }), function (e2) {
                 return s.apply(this, arguments);

@@ -1,92 +1,38 @@
 import jestLite from './jestLite';
+
 /**
  * Setup Jest Lite functions as globals to run tests
  * in a Jest-like style (describe, it, expect, etc.).
- *
- * Adds support for async before/beforeAll.
  */
 export function setupJestLiteGlobals(): void {
-    
-    // Destructure core functions (keep originals)
     const {
         describe,
         it,
         expect,
-        run: originalRun,
-        beforeAll: originalBeforeAll,
-        before: originalBefore,
+        run,
+        beforeAll,
         afterAll,
         beforeEach,
         afterEach,
+        before, // may be undefined in some builds
     } = jestLite;
 
-    // Arrays to track pending before-hook promises and the first encountered error
-    const pendingBeforePromises: Promise<any>[] = [];
-    let firstBeforeError: any = null;
+    const g = globalThis as unknown as Record<string, unknown>;
 
-    // Helper: register a noop hook with the original API to avoid double side-effects
-    function registerNoop(originalRegister: Function) {
-        try {
-            // register a no-op function so runner still sees a hook (if it relies on hooks count)
-            originalRegister(() => undefined);
-        } catch (e) {
-            // some implementations may expect different signatures; ignore registration error
-        }
-    }
+    g.describe = describe;
+    g.it = it;
+    g.expect = expect;
+    g.run = run;
 
-    // Wrap a before-like register function (before, beforeAll)
-    function createBeforeWrapper(originalRegister?: Function) {
-        if (!originalRegister) return undefined;
+    // Hooks
+    g.beforeAll = beforeAll;
+    g.afterAll = afterAll;
+    g.beforeEach = beforeEach;
+    g.afterEach = afterEach;
 
-        return function (fn: Function) {
-            registerNoop(originalRegister);
-            try {
-                const result = fn();
-                if (result && typeof (result as any).then === "function") {
-                    const p = (result as Promise<any>).catch(err => {
-                        if (!firstBeforeError) {
-                            firstBeforeError = err;
-                            console.error("Error in before/beforeAll hook:", err);
-                        }
-                        throw err;
-                    });
-                    pendingBeforePromises.push(p);
-                }
-            } catch (err) {
-                const p = Promise.reject(err);
-                pendingBeforePromises.push(p.catch(() => { }));
-                if (!firstBeforeError) firstBeforeError = err;
-            }
-        };
-    }
+    // Use before if exists, otherwise alias to beforeAll
+    g.before = before ?? beforeAll;
 
-
-    // Create wrappers for both `beforeAll` and `before` (some libs alias before->beforeAll)
-    const wrappedBeforeAll = createBeforeWrapper(originalBeforeAll);
-    const wrappedBefore = createBeforeWrapper(originalBefore || originalBeforeAll);
-
-    // Replace jestLite registration functions with wrappers (if they exist)
-    if (wrappedBeforeAll) jestLite.beforeAll = wrappedBeforeAll;
-    if (wrappedBefore) jestLite.before = wrappedBefore;
-
-    // Wrap run(): wait for all pending before-promises (if any) before calling original run
-    jestLite.run = async function (...args: any[]) {
-        if (pendingBeforePromises.length > 0) {
-            // Wait for all before hooks to settle
-            await Promise.allSettled(pendingBeforePromises);
-        }
-        return originalRun.apply(this, args);
-    };
-
-    // Expose globals as before (so tests can remain unchanged)
-    (globalThis as any).describe = describe;
-    (globalThis as any).it = it;
-    (globalThis as any).expect = expect;
-    // assign wrapped before/backwards aliases
-    (globalThis as any).before = (globalThis as any).beforeAll = jestLite.beforeAll;
-    (globalThis as any).after = (globalThis as any).afterAll = afterAll;
-    (globalThis as any).beforeEach = beforeEach;
-    (globalThis as any).afterEach = afterEach;
-
-    (globalThis as any).run = jestLite.run;
+    // Alias after -> afterAll
+    g.after = afterAll;
 }
