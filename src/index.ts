@@ -74,6 +74,7 @@ const STYLES = `
 
 /* Duration indicator */
 .jest-browser-reporter .duration { color: #64748b; font-size: 14px; }
+.jest-browser-reporter .duration.skipped { color: #94a3b8; font-style: italic; }
 
 /* Running indicator styles */
 .jest-browser-reporter .running-indicator {
@@ -545,22 +546,26 @@ export class JestBrowserReporter {
         const testName = (test.name || (sanitizedPath[sanitizedPath.length - 1]) || 'Unnamed Test');
 
         const errorHtml = test.status === 'fail' && test.errors?.length ? `
-            <button class="toggle-error">Show Error Details</button>
-            <div class="error-details"><pre>${this.escapeHtml(test.errors.join('\n\n'))}</pre></div>
-        ` : '';
+        <button class="toggle-error">Show Error Details</button>
+        <div class="error-details"><pre>${this.escapeHtml(test.errors.join('\n\n'))}</pre></div>
+    ` : '';       
+        
+        const durationHtml = test.status === 'skip'
+            ? '<span class="duration skipped">-</span>'
+            : `<span class="duration">${this.escapeHtml(String(test.duration || 0))}ms</span>`;
 
         const searchValue = this.escapeHtml((testName + ' ' + displayPath).toLowerCase());
         return `
-            <tr class="group-row" data-status="${this.escapeHtml(test.status)}" data-group="${this.escapeHtml(groupKey || '')}" data-search="${searchValue}">
-                <td><span class="status-indicator ${statusClass}">${statusIcon} ${statusText}</span></td>
-                <td>
-                    <div class="test-path">${this.escapeHtml(displayPath)}</div>
-                    <div class="test-name">${this.escapeHtml(testName)}</div>
-                    ${errorHtml}
-                </td>
-                <td><span class="duration">${this.escapeHtml(String(test.duration || 0))}ms</span></td>
-            </tr>
-        `;
+        <tr class="group-row" data-status="${this.escapeHtml(test.status)}" data-group="${this.escapeHtml(groupKey || '')}" data-search="${searchValue}">
+            <td><span class="status-indicator ${statusClass}">${statusIcon} ${statusText}</span></td>
+            <td>
+                <div class="test-path">${this.escapeHtml(displayPath)}</div>
+                <div class="test-name">${this.escapeHtml(testName)}</div>
+                ${errorHtml}
+            </td>
+            <td>${durationHtml}</td>
+        </tr>
+    `;
     }
 
     // Apply filters and search; updates group meta counts and header visibility
