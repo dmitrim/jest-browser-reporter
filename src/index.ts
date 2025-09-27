@@ -36,7 +36,13 @@ const STYLES = `
 .jest-browser-reporter .filter-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .jest-browser-reporter .filter-btn, .jest-browser-reporter .group-toggle-btn { padding: 6px 12px; border: 1px solid #cbd5e1; background: white; border-radius: 4px; cursor: pointer; transition: all 0.2s; }
 .jest-browser-reporter .filter-btn.active, .jest-browser-reporter .group-toggle-btn.active { background: #4a6ee0; color: white; border-color: #4a6ee0; }
-.jest-browser-reporter .search-input { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 14px; }
+
+/* Search input with clear button */
+.jest-browser-reporter .search-container { position: relative; display: inline-block; }
+.jest-browser-reporter .search-input { padding: 6px 30px 6px 10px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 14px; width: 200px; }
+.jest-browser-reporter .search-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; font-size: 16px; cursor: pointer; color: #94a3b8; padding: 0; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
+.jest-browser-reporter .search-clear:hover { color: #64748b; }
+.jest-browser-reporter .search-clear.hidden { display: none; }
 
 /* Test table */
 .jest-browser-reporter .test-table { width: 100%; border-collapse: collapse; }
@@ -75,8 +81,15 @@ export class JestBrowserReporter {
     currentFilter: string;
     currentSearch: string;
     groupBySuite: boolean;
-    elements: { container: HTMLElement; summary: Element | null; tableBody: Element | null; searchInput: HTMLInputElement | null } | undefined;
+    elements: {
+        container: HTMLElement;
+        summary: Element | null;
+        tableBody: Element | null;
+        searchInput: HTMLInputElement | null;
+        searchClear: HTMLElement | null;
+    } | undefined;
     private searchHandler?: (e: Event) => void;
+    private clearHandler?: (e: Event) => void;
 
     constructor(options: JestBrowserReporterOptions) {
         this.options = options || {} as any;
@@ -114,7 +127,8 @@ export class JestBrowserReporter {
             container,
             summary: container.querySelector('.test-summary'),
             tableBody: container.querySelector('#test-results-body'),
-            searchInput: container.querySelector('.search-input') as HTMLInputElement | null
+            searchInput: container.querySelector('.search-input') as HTMLInputElement | null,
+            searchClear: container.querySelector('.search-clear') as HTMLElement | null
         };
 
         // Delegated listeners
@@ -134,7 +148,10 @@ export class JestBrowserReporter {
                         <div class="stat skip"><span class="stat-value">0</span><span class="stat-label">Skipped</span></div>
                     </div>
                     <div class="filter-controls">
-                        <input type="text" class="search-input" placeholder="Search tests…" />
+                        <div class="search-container">
+                            <input type="text" class="search-input" placeholder="Search tests…" />
+                            <button class="search-clear hidden" type="button">&times;</button>
+                        </div>
                         <button class="filter-btn active" data-filter="all">All</button>
                         <button class="filter-btn" data-filter="pass">Passed</button>
                         <button class="filter-btn" data-filter="fail">Failed</button>
@@ -183,12 +200,24 @@ export class JestBrowserReporter {
             this.searchHandler = this.debounce((e: Event) => {
                 const input = e.target as HTMLInputElement;
                 this.currentSearch = (input.value || '').toLowerCase();
+                this.updateClearButtonVisibility();
                 this.applyFilter();
             }, 180);
             this.elements.searchInput.addEventListener('input', this.searchHandler);
             // restore value
             this.elements.searchInput.value = this.currentSearch || '';
         }
+
+        // Clear button
+        if (this.elements.searchClear) {
+            if (this.clearHandler) {
+                this.elements.searchClear.removeEventListener('click', this.clearHandler);
+            }
+            this.clearHandler = this.onClearSearch.bind(this);
+            this.elements.searchClear.addEventListener('click', this.clearHandler);
+        }
+
+        this.updateClearButtonVisibility();
     }
 
     onFilterClick(e: Event) {
@@ -208,6 +237,29 @@ export class JestBrowserReporter {
             if (groupBtn) groupBtn.classList.toggle('active', this.groupBySuite);
         }
         this.renderTable();
+    }
+
+    onClearSearch() {
+        if (!this.elements?.searchInput) return;
+
+        this.elements.searchInput.value = '';
+        this.currentSearch = '';
+        this.updateClearButtonVisibility();
+        this.applyFilter();
+
+        // Focus back to input after clear
+        this.elements.searchInput.focus();
+    }
+
+    updateClearButtonVisibility() {
+        if (!this.elements?.searchClear) return;
+
+        const hasText = this.currentSearch.length > 0;
+        if (hasText) {
+            this.elements.searchClear.classList.remove('hidden');
+        } else {
+            this.elements.searchClear.classList.add('hidden');
+        }
     }
 
     // Delegated click handling for error toggles and group header toggles
@@ -268,7 +320,10 @@ export class JestBrowserReporter {
                 <div class="stat skip"><span class="stat-value">${skip}</span><span class="stat-label">Skipped</span></div>
             </div>
             <div class="filter-controls">
-                <input type="text" class="search-input" placeholder="Search tests…" value="${this.escapeHtml(this.currentSearch)}"/>
+                <div class="search-container">
+                    <input type="text" class="search-input" placeholder="Search tests…" value="${this.escapeHtml(this.currentSearch)}"/>
+                    <button class="search-clear ${this.currentSearch ? '' : 'hidden'}" type="button">&times;</button>
+                </div>
                 <button class="filter-btn ${this.currentFilter === 'all' ? 'active' : ''}" data-filter="all">All</button>
                 <button class="filter-btn ${this.currentFilter === 'pass' ? 'active' : ''}" data-filter="pass">Passed</button>
                 <button class="filter-btn ${this.currentFilter === 'fail' ? 'active' : ''}" data-filter="fail">Failed</button>
@@ -281,6 +336,7 @@ export class JestBrowserReporter {
             this.elements.summary = this.elements.container.querySelector('.test-summary');
             this.elements.tableBody = this.elements.container.querySelector('#test-results-body');
             this.elements.searchInput = this.elements.summary ? this.elements.summary.querySelector('.search-input') as HTMLInputElement | null : null;
+            this.elements.searchClear = this.elements.summary ? this.elements.summary.querySelector('.search-clear') as HTMLElement | null : null;
         }
         this.setupEventListeners();
     }
