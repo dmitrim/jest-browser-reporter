@@ -51,23 +51,30 @@ Methods:
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <title>DocSol API Tests</title>
     <!-- your scripts -->
 </head>
 <body>
-    <div id="app"></div>
+    <div id="root"></div>
 
     <script type="module">
-        import JestBrowserReporter from 'https://unpkg.com/jest-browser-reporter';
+        import { setupJestLiteGlobals } from 'jest-browser-reporter';
+        setupJestLiteGlobals();
+    </script>
+
+    <script type="module">
         import './tests_to_run.ts';
-
+        import { JestBrowserReporter } from 'jest-browser-reporter';
         const reporter = new JestBrowserReporter({
-            container: document.getElementById('app')
+            container: document.getElementById('root'),
+            showBackLink: true
         });
 
+        // Run tests asynchronously and render results
         run().then((results) => {
-            reporter.render(results);
+            console.log('Raw test results:', results);
+            reporter.render(results);            
         });
+
     </script>
 </body>
 </html>

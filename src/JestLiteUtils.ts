@@ -1,12 +1,12 @@
+import jestLite from './jestLite';
 /**
  * Setup Jest Lite functions as globals to run tests
  * in a Jest-like style (describe, it, expect, etc.).
  *
- * Adds support for async before/beforeAll and .only/.skip.
- *
- * @param jestLite - The imported Jest Lite module (default export).
+ * Adds support for async before/beforeAll.
  */
-export function setupJestLiteGlobals(jestLite: any): void {
+export function setupJestLiteGlobals(): void {
+    
     // Destructure core functions (keep originals)
     const {
         describe,
