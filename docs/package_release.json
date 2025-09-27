@@ -1,6 +1,6 @@
 {
   "name": "@dmarfin/jest-browser-reporter",
-  "version": "1.0.0-a3",
+  "version": "1.0.0",
   "description": "A beautiful browser-based test results reporter for Jest Lite",
   "author": "Dmitriy Marfin",
   "license": "MIT",

@@ -4,7 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0-a3] - 2025-09-28
+## [1.0.0] - 2025-09-28
+### Added
+- Test results now include formatted source code view
+ 
+## [1.0.0-a3] - 2025-09-27
 ### Added
 - Optional `testNameFilter?: string` parameter in `JestBrowserReporter.run` to allow running only tests matching a specific name.
 - `.only` and `.skip` support for describe blocks

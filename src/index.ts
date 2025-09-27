@@ -1,14 +1,12 @@
 import { runJestLite } from "./JestLiteUtils";
+import { formatSourceCodeHtml } from "./utils/MiscUtils";
 
 export { setupJestLiteGlobals } from "./JestLiteUtils";
 
-// Enhanced Jest Browser Reporter
-// - Improved button styling and positioning
-// - Added visual feedback for running tests
-// - Enhanced responsive design for mobile devices
-// - Added keyboard shortcuts (Ctrl+F for search, Escape to clear)
-// - Improved loading states and animations
-// - Better error handling and user feedback
+// Enhanced Jest Browser Reporter with Source Code Display
+// - Added source code display functionality
+// - Source code button appears for all tests when available
+// - Similar styling and behavior as error details
 
 export type JestBrowserReporterOptions = {
     container: HTMLElement;
@@ -186,7 +184,28 @@ const STYLES = `
     overflow-x: auto; 
     line-height: 1.4;
 }
-.jest-browser-reporter .toggle-error { 
+
+/* Source code display */
+.jest-browser-reporter .source-code { 
+    display: none; 
+    margin-top: 12px; 
+    padding: 12px; 
+    background-color: #f8fafc; 
+    border-radius: 6px; 
+    border-left: 4px solid #4a6ee0; 
+}
+.jest-browser-reporter .source-code pre { 
+    white-space: pre-wrap; 
+    font-family: 'Consolas', 'Monaco', monospace; 
+    font-size: 13px; 
+    color: #374151; 
+    overflow-x: auto; 
+    line-height: 1.4;
+    margin: 0;
+}
+
+.jest-browser-reporter .toggle-error,
+.jest-browser-reporter .toggle-source { 
     background: none; 
     border: none; 
     color: #4a6ee0; 
@@ -197,8 +216,10 @@ const STYLES = `
     display: inline-flex;
     align-items: center;
     gap: 4px;
+    margin-right: 16px;
 }
-.jest-browser-reporter .toggle-error:hover { text-decoration: underline; }
+.jest-browser-reporter .toggle-error:hover,
+.jest-browser-reporter .toggle-source:hover { text-decoration: underline; }
 
 /* Enhanced grouping */
 .jest-browser-reporter .group-header { 
@@ -358,6 +379,9 @@ const STYLES = `
     .jest-browser-reporter .test-row-content { flex-direction: column; gap: 12px; }
     .jest-browser-reporter .test-side-content { align-items: stretch; width: 100%; }
     .jest-browser-reporter .run-btn { justify-content: center; }
+    .jest-browser-reporter .test-actions { flex-direction: column; align-items: flex-start; }
+    .jest-browser-reporter .toggle-error,
+    .jest-browser-reporter .toggle-source { margin-right: 0; margin-bottom: 8px; }
 }
 
 /* Keyboard shortcut hint */
@@ -798,21 +822,18 @@ export class JestBrowserReporter {
                 return;
             }
 
-            // Toggle error details - FIXED VERSION
-            const btn = target.closest('.toggle-error') as HTMLElement | null;
-            if (btn) {
-                // Find the error details within the same table cell
-                const cell = btn.closest('td');
-                if (cell) {
-                    const details = cell.querySelector('.error-details') as HTMLElement | null;
-                    if (details) {
-                        const isVisible = details.style.display === 'block';
-                        details.style.display = isVisible ? 'none' : 'block';
-                        btn.innerHTML = isVisible ?
-                            '🔽 Show Error Details' :
-                            '🔼 Hide Error Details';
-                    }
-                }
+            // Toggle error details
+            const errorBtn = target.closest('.toggle-error') as HTMLElement | null;
+            if (errorBtn) {
+                this.toggleErrorDetails(errorBtn);
+                ev.preventDefault();
+                return;
+            }
+
+            // Toggle source code
+            const sourceBtn = target.closest('.toggle-source') as HTMLElement | null;
+            if (sourceBtn) {
+                this.toggleSourceCode(sourceBtn);
                 ev.preventDefault();
                 return;
             }
@@ -836,6 +857,62 @@ export class JestBrowserReporter {
                 return;
             }
         });
+    }
+
+    /**
+     * Toggle error details display
+     */
+    private toggleErrorDetails(button: HTMLElement) {
+        const cell = button.closest('td');
+        if (cell) {
+            const details = cell.querySelector('.error-details') as HTMLElement | null;
+            if (details) {
+                const isVisible = details.style.display === 'block';
+                details.style.display = isVisible ? 'none' : 'block';
+                button.innerHTML = isVisible ?
+                    '🔽 Show Error Details' :
+                    '🔼 Hide Error Details';
+            }
+        }
+    }
+
+    /**
+     * Toggle source code display
+     */
+    private toggleSourceCode(button: HTMLElement) {
+        const cell = button.closest('td');
+        if (cell) {
+            const sourceCode = cell.querySelector('.source-code') as HTMLElement | null;
+            if (sourceCode) {
+                const isVisible = sourceCode.style.display === 'block';
+                sourceCode.style.display = isVisible ? 'none' : 'block';
+                button.innerHTML = isVisible ?
+                    '📄 Show Source Code' :
+                    '📋 Hide Source Code';
+            }
+        }
+    }
+
+    /**
+     * Get source code for a test from the global map
+     */
+    private getTestSourceCode(testName: string): string | null {
+        try {
+            const sourceMap = (globalThis as any).__JESTLITE_TEST_SOURCE_MAP__;
+            console.log("getTestSourceCode:", sourceMap);
+            console.log("getTestSourceCode, testName:", testName);
+            console.log("getTestSourceCode, sourceMap[testName]:", sourceMap[testName]);
+            
+            if (sourceMap && sourceMap.has(testName)) {
+                const sourceInfo = sourceMap.get(testName);
+                console.log("getTestSourceCode, sourceInfo:", sourceInfo);
+                return sourceInfo?.formatted || sourceInfo?.source || null;
+            }
+            return null;
+        } catch (error) {
+            console.warn('Could not get test source code:', error);
+            return null;
+        }
     }
 
     /**
@@ -957,12 +1034,27 @@ export class JestBrowserReporter {
         const displayPath = sanitizedPath.length ? sanitizedPath.join(' › ') : (test.name || 'Unnamed Test');
         const testName = (test.name || (sanitizedPath[sanitizedPath.length - 1]) || 'Unnamed Test');
 
+        // Get source code for this test
+        const sourceCode = this.getTestSourceCode(testName);
+
+        // Build actions section with source code button (always shown when source is available)
+        const sourceButton = sourceCode ?
+            `<button class="toggle-source">📄 Show Source Code</button>` : '';
+
+        const errorButton = test.status === 'fail' && test.errors?.length ?
+            `<button class="toggle-error">🔽 Show Error Details</button>` : '';
+
+        const actionsHtml = sourceButton || errorButton ? `
+            <div class="test-actions">
+                ${errorButton}
+                ${sourceButton}
+            </div>
+        ` : '';
+
         const errorHtml = test.status === 'fail' && test.errors?.length ? `
-        <div class="test-actions">
-            <button class="toggle-error">🔽 Show Error Details</button>
-        </div>
-        <div class="error-details"><pre>${this.escapeHtml(test.errors.join('\n\n'))}</pre></div>
-    ` : '';
+            <div class="error-details"><pre>${this.escapeHtml(test.errors.join('\n\n'))}</pre></div>
+        ` : '';
+        const sourceCodeHtml: string = formatSourceCodeHtml(sourceCode);
 
         const durationHtml = test.status === 'skip'
             ? '<span class="duration skipped">-</span>'
@@ -982,7 +1074,9 @@ export class JestBrowserReporter {
             <div class="test-main-content">
                 <div class="test-path">${this.escapeHtml(displayPath)}</div>
                 <div class="test-name">${this.escapeHtml(testName)}</div>
+                ${actionsHtml}
                 ${errorHtml}
+                ${sourceCodeHtml}
             </div>
             <div class="test-side-content">
                 ${durationHtml}
