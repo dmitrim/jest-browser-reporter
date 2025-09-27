@@ -1,3 +1,5 @@
+import { runJestLite } from "./JestLiteUtils";
+
 export { setupJestLiteGlobals } from "./JestLiteUtils";
 
 // Improved Jest Browser Reporter
@@ -141,6 +143,44 @@ export class JestBrowserReporter {
         this.init();
         this.showRunningIndicator();
     }
+
+    /**
+     * Run all tests asynchronously and automatically handle the results.
+     * 
+     * This method:
+     * - Executes all Jest Lite tests
+     * - Renders the results upon successful completion
+     * - Shows a running indicator while tests are executing
+     * - Hides the running indicator after tests complete or fail
+     * - Provides error handling for test execution failures
+     * 
+     * @returns Promise<void> that resolves when tests are complete and results are rendered
+     * @example
+     * ```typescript
+     * const reporter = new JestBrowserReporter({ container: document.getElementById('root') });
+     * reporter.run()
+     *   .then(() => {
+     *     console.log('Tests completed successfully');
+     *   })
+     *   .catch(error => {
+     *     console.error('Test execution failed:', error);
+     *   });
+     * ```
+     */
+    public async run(): Promise<any> {
+        this.showRunningIndicator();
+        try {
+            const results = await runJestLite()
+            this.render(results);
+            return results;
+        } catch (ex) {
+            console.error('Test execution failed:', ex);
+            return [];
+        } finally {
+            this.hideRunningIndicator();
+        }
+    }
+
 
     /**
      * Show running indicator with custom message and hide test results
