@@ -4,9 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0-a3] - 2025-09-27
+## [1.0.0-a3] - 2025-09-28
 ### Added
-- Added `.only` and `.skip` support for describe blocks
+- Optional `testNameFilter?: string` parameter in `JestBrowserReporter.run` to allow running only tests matching a specific name.
+- `.only` and `.skip` support for describe blocks
   - `describe.only()` now runs only the specified test suite
   - `describe.skip()` now properly skips the specified test suite
   - Maintains compatibility with existing `it.only()` and `it.skip()`
@@ -14,19 +15,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Ensure asynchronous `before` hooks are properly awaited before running tests.
 - Fix jestLite (test-runner): support `.skip/.only` with proper async hooks
-  **Problem:** 
-  - Wrapper approach caused hook execution issues
-  - Async hooks weren't properly awaited  
-  - Error handling didn't propagate correctly
-
-  **Solution:**
-  - Patch jest-lite core describe block runner directly
-  - Add yield-based async hook execution with error bubbling
-  - Failed `beforeAll` now correctly fails tests instead of skipping
-  - Maintain recursive `.skip/.only` filtering behavior
-
-  **BREAKING:** None - maintains full backward compatibility
-
 
 ## [1.0.0-a2] - 2025-09-26
 ### Added

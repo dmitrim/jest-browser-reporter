@@ -8179,29 +8179,84 @@ ${d}` : "") + h.replace(/AssertionError(.*)/g, "");
 
             //dma: added support for .skip and .only for describe blocks>>
 
+            /**
+             * Helper: determine if any test in this describe subtree has a name that matches the filter.
+             * This is used so that parent describes are executed when they contain matching tests.
+             */
+            function subtreeHasMatchingName(block, filter) {
+                if (!filter) return false;
+                // check tests in this block
+                for (const t3 of block.tests) {
+                    if (t3 && typeof t3.testName === "string" && t3.testName.indexOf(filter) !== -1)
+                        return true;
+                    // some representations may store name as 'name' or 'title'; try a fallback
+                    if (t3 && typeof t3.name === "string" && t3.name.indexOf(filter) !== -1)
+                        return true;
+                }
+                // recursively check children blocks
+                for (const ch of block.children) {
+                    if (subtreeHasMatchingName(ch, filter))
+                        return true;
+                    // also check describe name itself
+                    if (ch && typeof ch.name === "string" && ch.name.indexOf(filter) !== -1)
+                        return true;
+                }
+                return false;
+            }
+
+            /**
+             * Helper: determine whether any ancestor describe has a name matching the filter.
+             * Used to allow tests to run if their parent describe matches the filter.
+             */
+            function isInMatchedDescribe(node, filter) {
+                if (!filter) return false;
+                let current = node.parent;
+                while (current) {
+                    if (current.name && typeof current.name === "string" && current.name.indexOf(filter) !== -1)
+                        return true;
+                    current = current.parent;
+                }
+                return false;
+            }
+
             const c = (s = i(function* runDescribe(e2) {
                 const state = (0, r.getState)();
+                const testNameFilter = globalThis.__JESTLITE_TEST_NAME_FILTER__; // << read filter dynamically
 
-                const hasOwnOnlyTests = e2.tests.some(t => t.mode === "only");
                 const isRoot = !e2.parent;
 
-                // Skip logic: if the block is .skip or ignored due to .only/focused tests
-                if (!isRoot && (e2.mode === "skip" || (state.hasFocusedTests && !hasOwnOnlyTests && e2.mode !== "only"))) {
-                    (0, r.dispatch)({ describeBlock: e2, name: "run_describe_start" });
+                // Determine whether this describe or its subtree matches the global name filter (if any)
+                const describeNameMatches = testNameFilter && e2.name && typeof e2.name === "string" && e2.name.indexOf(testNameFilter) !== -1;
+                const subtreeMatches = testNameFilter ? subtreeHasMatchingName(e2, testNameFilter) : false;
+                const shouldRunBecauseOfFilter = !!(testNameFilter && (describeNameMatches || subtreeMatches));
 
-                    function markSkipped(block) {
-                        for (const t3 of block.tests) {
-                            (0, r.dispatch)({ name: "test_skip", test: t3 });
-                        }
-                        for (const ch of block.children) {
-                            markSkipped(ch);
-                        }
+                const hasOwnOnlyTests = e2.tests && e2.tests.some ? e2.tests.some(t => t.mode === "only") : false;
+
+
+                function markSkipped(block) {
+                    for (const t3 of block.tests) {
+                        (0, r.dispatch)({ name: "test_skip", test: t3 });
                     }
+                    for (const ch of block.children) {
+                        markSkipped(ch);
+                    }
+                }
 
-                    markSkipped(e2);
-
-                    (0, r.dispatch)({ describeBlock: e2, name: "run_describe_finish" });
-                    return;
+                if (testNameFilter) {
+                    if (!isRoot && !shouldRunBecauseOfFilter) {
+                        (0, r.dispatch)({ describeBlock: e2, name: "run_describe_start" });
+                        markSkipped(e2);
+                        (0, r.dispatch)({ describeBlock: e2, name: "run_describe_finish" });
+                        return;
+                    }
+                } else {
+                    // Skip logic: if the block is .skip or ignored due to .only/focused tests
+                    if (!isRoot && (e2.mode === "skip" || (state.hasFocusedTests && !hasOwnOnlyTests && e2.mode !== "only"))) {
+                        (0, r.dispatch)({ describeBlock: e2, name: "run_describe_start" });
+                        markSkipped(e2);
+                        (0, r.dispatch)({ describeBlock: e2, name: "run_describe_finish" });
+                        return;
+                    }
                 }
 
                 (0, r.dispatch)({ describeBlock: e2, name: "run_describe_start" });
@@ -8279,15 +8334,28 @@ ${d}` : "") + h.replace(/AssertionError(.*)/g, "");
                 return s.apply(this, arguments);
             });
 
-            //<< added support for .skip and .only for describe blocks
+            //:dma
 
 
 
             var s;
             const f = (l = i(function* (e2) {
                 const t2 = Object.create(null);
-                if (e2.mode === "skip" || (0, r.getState)().hasFocusedTests && e2.mode !== "only")
-                    return void (0, r.dispatch)({ name: "test_skip", test: e2 });
+
+                //dma:
+                const testNameFilter = globalThis.__JESTLITE_TEST_NAME_FILTER__;
+                if (testNameFilter) {
+                    const testName = (e2.testName || e2.name || "");
+                    const testMatches = typeof testName === "string" && testName.indexOf(testNameFilter) !== -1;
+                    const inMatchedDescribe = isInMatchedDescribe(e2, testNameFilter);
+                    if (!testMatches && !inMatchedDescribe) {
+                        return void (0, r.dispatch)({ name: "test_skip", test: e2 });
+                    }
+                } else {
+                    if (e2.mode === "skip" || (0, r.getState)().hasFocusedTests && e2.mode !== "only")
+                        return void (0, r.dispatch)({ name: "test_skip", test: e2 });
+                }
+                //:dma
                 var n2 = (0, o.getEachHooksForTest)(e2);
                 const i2 = n2.afterEach, a2 = n2.beforeEach;
                 for (const e3 of a2)

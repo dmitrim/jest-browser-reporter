@@ -191,6 +191,7 @@ export class JestBrowserReporter {
      */
     public async run(testNameFilter?: string): Promise<any> {
         (globalThis as any).__JESTLITE_TEST_NAME_FILTER__ = testNameFilter || undefined; //TBD: add support in JestLite
+        alert((globalThis as any).__JESTLITE_TEST_NAME_FILTER__);
         this.showRunningIndicator();
         try {
             const results = await runJestLite()

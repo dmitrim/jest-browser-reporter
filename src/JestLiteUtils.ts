@@ -197,15 +197,6 @@ export function fail(message?: string): never {
 }
 
 /**
- * Setup and run Jest Lite tests with automatic global setup
- * @returns Promise resolving to test results array
- */
-export async function setupAndRunJestLite(): Promise<any> {
-    setupJestLiteGlobals();
-    return await runJestLite();
-}
-
-/**
  * Reset Jest Lite environment (useful for testing)
  */
 export function resetJestLiteGlobals(): void {
