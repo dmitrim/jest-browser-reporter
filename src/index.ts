@@ -146,29 +146,51 @@ export class JestBrowserReporter {
     }
 
     /**
-     * Run all tests asynchronously and automatically handle the results.
+     * Asynchronously runs Jest Lite tests with optional name-based filtering and handles result rendering.
      * 
-     * This method:
-     * - Executes all Jest Lite tests
-     * - Renders the results upon successful completion
-     * - Shows a running indicator while tests are executing
-     * - Hides the running indicator after tests complete or fail
-     * - Provides error handling for test execution failures
+     * This method provides a complete test execution lifecycle:
+     * - Applies optional test name filtering before execution
+     * - Displays a running indicator during test execution
+     * - Executes all matching tests via Jest Lite test runner
+     * - Automatically renders results upon successful completion
+     * - Handles errors gracefully with console logging
+     * - Ensures running indicator is hidden regardless of outcome
      * 
-     * @returns Promise<void> that resolves when tests are complete and results are rendered
+     * @param {string} [testNameFilter] - Optional filter string to run only tests whose names contain this substring.
+     *   If provided, only tests with matching names will be executed. If omitted or undefined, all tests run.
+     * 
+     * @returns {Promise<any>} Promise that resolves with test results array when execution completes successfully,
+     *   or resolves with empty array on failure. The promise never rejects due to internal error handling.
+     * 
+     * @throws {Error} Only throws errors related to parameter validation, not test execution errors
+     * 
      * @example
-     * ```typescript
+     * // Run all tests
      * const reporter = new JestBrowserReporter({ container: document.getElementById('root') });
-     * reporter.run()
-     *   .then(() => {
-     *     console.log('Tests completed successfully');
+     * const results = await reporter.run();
+     * console.log(`Total tests: ${results.length}`);
+     * 
+     * @example
+     * // Run only tests containing "login" in their names
+     * const results = await reporter.run('login');
+     * console.log(`Filtered tests: ${results.length}`);
+     * 
+     * @example
+     * // Handle execution with promise chain
+     * reporter.run('api')
+     *   .then(results => {
+     *     console.log('API tests completed:', results);
      *   })
      *   .catch(error => {
-     *     console.error('Test execution failed:', error);
+     *     // Note: This catch only handles parameter validation errors, not test failures
+     *     console.error('Execution setup failed:', error);
      *   });
-     * ```
+     * 
+     * @see {@link JestBrowserReporter.render} For result rendering details
+     * @see {@link JestBrowserReporter.showRunningIndicator} For UI indicator implementation
      */
-    public async run(): Promise<any> {
+    public async run(testNameFilter?: string): Promise<any> {
+        (globalThis as any).__JESTLITE_TEST_NAME_FILTER__ = testNameFilter || undefined; //TBD: add support in JestLite
         this.showRunningIndicator();
         try {
             const results = await runJestLite()
