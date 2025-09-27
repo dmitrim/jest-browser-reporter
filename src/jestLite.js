@@ -8176,22 +8176,50 @@ ${d}` : "") + h.replace(/AssertionError(.*)/g, "");
                 return u.apply(this, arguments);
             });
             var u;
+
+            //dma: added support for .skip and .only for describe blocks>>
+
             const c = (s = i(function* (e2) {
+                const state = (0, r.getState)();
+
+                const hasOwnOnlyTests = e2.tests.some(t => t.mode === "only");
+                const isRoot = !e2.parent;
+
+                if (!isRoot && (e2.mode === "skip" || (state.hasFocusedTests && !hasOwnOnlyTests && e2.mode !== "only"))) {
+                    (0, r.dispatch)({ describeBlock: e2, name: "run_describe_start" });
+
+                    function markSkipped(block) {
+                        for (const t3 of block.tests)
+                            (0, r.dispatch)({ name: "test_skip", test: t3 });
+                        for (const ch of block.children)
+                            markSkipped(ch);
+                    }
+
+                    markSkipped(e2);
+
+                    (0, r.dispatch)({ describeBlock: e2, name: "run_describe_finish" });
+                    return;
+                }
+
                 (0, r.dispatch)({ describeBlock: e2, name: "run_describe_start" });
-                var t2 = (0, o.getAllHooksForDescribe)(e2);
-                const n2 = t2.beforeAll, i2 = t2.afterAll;
-                for (const e3 of n2)
-                    p(e3);
+                const hooks = (0, o.getAllHooksForDescribe)(e2);
+                for (const h of hooks.beforeAll)
+                    p(h);
                 for (const t3 of e2.tests)
                     yield f(t3);
                 for (const t3 of e2.children)
                     yield c(t3);
-                for (const e3 of i2)
-                    p(e3);
+                for (const h of hooks.afterAll)
+                    p(h);
                 (0, r.dispatch)({ describeBlock: e2, name: "run_describe_finish" });
             }), function (e2) {
                 return s.apply(this, arguments);
             });
+
+            //<< added support for .skip and .only for describe blocks
+
+
+
             var s;
             const f = (l = i(function* (e2) {
                 const t2 = Object.create(null);
