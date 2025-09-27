@@ -3879,6 +3879,27 @@ Use jest.setTimeout(newTimeout) to increase the timeout value, if this is a long
                         }
                         case "add_test": {
                             const e3 = n2.currentDescribeBlock, o2 = t2.fn, i = t2.mode, a = t2.testName, u = (0, r.makeTest)(o2, i, a, e3);
+
+                            // Capture source code of the test function - PRESERVE ORIGINAL FORMATTING
+                            if (o2 && typeof o2 === 'function') {
+                                try {
+                                    // Store the original function source AS IS
+                                    u.sourceCode = o2.toString();
+
+                                    // Store in global map without formatting
+                                    if (!globalThis.__JESTLITE_TEST_SOURCE_MAP__) {
+                                        globalThis.__JESTLITE_TEST_SOURCE_MAP__ = new Map();
+                                    }
+                                    globalThis.__JESTLITE_TEST_SOURCE_MAP__.set(a, {
+                                        source: u.sourceCode,
+                                        // Don't format here - keep original
+                                        formatted: o2.toString()
+                                    });
+                                } catch (error) {
+                                    // Silent fail - source code capture is optional
+                                }
+                            }
+
                             u.mode === "only" && (n2.hasFocusedTests = true), e3.tests.push(u);
                             break;
                         }
