@@ -13,6 +13,7 @@
   ],
   "scripts": {
     "build": "set NODE_ENV=production&rollup -c",
+	"build-dev": "set NODE_ENV=development&rollup -c",
     "dev": "set NODE_ENV=development&rollup -c -w",
     "prepublishOnly": "npm run build"
   },
