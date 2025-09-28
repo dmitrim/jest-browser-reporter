@@ -1,5 +1,5 @@
 import { runJestLite } from "./JestLiteUtils";
-import { formatSourceCodeHtml } from "./utils/MiscUtils";
+import { HighlightingStyles, formatSourceCodeHtml } from "./utils/SourceCodeFormat";
 
 export { setupJestLiteGlobals } from "./JestLiteUtils";
 
@@ -430,6 +430,7 @@ const STYLES = `
         border: 1px solid #ccc;
     }
 }
+${HighlightingStyles}
 `;
 
 export class JestBrowserReporter {

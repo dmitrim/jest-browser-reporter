@@ -1,3 +1,68 @@
+// SourceCodeFormat.ts
+
+export const HighlightingStyles = `/* Syntax highlighting styles */
+.jest-browser-reporter .source-code .keyword {
+    color: #d73a49;
+    font-weight: 600;
+}
+
+.jest-browser-reporter .source-code .string {
+    color: #032f62;
+}
+
+.jest-browser-reporter .source-code .number {
+    color: #005cc5;
+}
+
+.jest-browser-reporter .source-code .constant {
+    color: #e36209;
+}
+
+.jest-browser-reporter .source-code .comment {
+    color: #6a737d;
+    font-style: italic;
+}
+
+.jest-browser-reporter .source-code .function {
+    color: #6f42c1;
+}
+
+.jest-browser-reporter .source-code .operator {
+    color: #5a32a3;
+    font-weight: 600;
+}
+
+/* Optional: Dark theme variant */
+@media (prefers-color-scheme: dark) {
+    .jest-browser-reporter .source-code .keyword {
+        color: #ff7b72;
+    }
+    
+    .jest-browser-reporter .source-code .string {
+        color: #a5d6ff;
+    }
+    
+    .jest-browser-reporter .source-code .number {
+        color: #79c0ff;
+    }
+    
+    .jest-browser-reporter .source-code .constant {
+        color: #ffa657;
+    }
+    
+    .jest-browser-reporter .source-code .comment {
+        color: #8b949e;
+    }
+    
+    .jest-browser-reporter .source-code .function {
+        color: #d2a8ff;
+    }
+    
+    .jest-browser-reporter .source-code .operator {
+        color: #c9d1d9;
+    }
+}`;
+
 /**
  * Formats source code for HTML display by removing function wrappers and normalizing indentation
  * @param sourceCode - The raw source code string to format
@@ -10,7 +75,27 @@ export function formatSourceCodeHtml(sourceCode: string | undefined | null): str
     // Remove function wrappers and clean up the code
     const cleanedCode = removeFunctionWrapper(sourceCode);
 
-    return `<div class="source-code"><pre>${escapeHtml(cleanedCode)}</pre></div>`;
+    // Apply basic syntax highlighting
+    const highlightedCode = basicHighlight(cleanedCode);
+
+    return `<div class="source-code"><pre>${highlightedCode}</pre></div>`;
+}
+
+/**
+ * Basic highlighting that's guaranteed to work
+ */
+function basicHighlight(code: string): string {
+    if (!code) return '';
+
+    // Escape HTML first
+    let escaped = escapeHtml(code);
+
+    // Apply only the most basic highlighting
+    return escaped
+        .replace(/\b(function|const|let|var|if|else|for|while|return|try|catch|finally|throw|new|this|class|async|await)\b/g,
+            '<span class="keyword">$1</span>')
+        .replace(/(\/\/[^\n]*)/g, '<span class="comment">$1</span>')
+        .replace(/(&quot;[^&quot;]*&quot;|'[^']*')/g, '<span class="string">$1</span>');
 }
 
 /**
