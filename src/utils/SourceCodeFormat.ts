@@ -1,6 +1,6 @@
 // SourceCodeFormat.ts
 
-export const HighlightingStyles = `/* Syntax highlighting styles */
+export const HighlightingStyles = `/* Enhanced syntax highlighting styles */
 .jest-browser-reporter .source-code .keyword {
     color: #d73a49;
     font-weight: 600;
@@ -32,36 +32,85 @@ export const HighlightingStyles = `/* Syntax highlighting styles */
     font-weight: 600;
 }
 
+.jest-browser-reporter .source-code .jest {
+    color: #99425b;
+    font-weight: 600;
+}
+
+.jest-browser-reporter .source-code .type {
+    color: #005cc5;       /* TypeScript types */
+    font-style: italic;
+}
+
+.jest-browser-reporter .source-code .matcher {
+    color: #d18616;       /* Jest matchers */
+    font-weight: 600;
+}
+
 /* Optional: Dark theme variant */
 @media (prefers-color-scheme: dark) {
-    .jest-browser-reporter .source-code .keyword {
-        color: #ff7b72;
-    }
-    
-    .jest-browser-reporter .source-code .string {
-        color: #a5d6ff;
-    }
-    
-    .jest-browser-reporter .source-code .number {
-        color: #79c0ff;
-    }
-    
-    .jest-browser-reporter .source-code .constant {
-        color: #ffa657;
-    }
-    
-    .jest-browser-reporter .source-code .comment {
-        color: #8b949e;
-    }
-    
-    .jest-browser-reporter .source-code .function {
-        color: #d2a8ff;
-    }
-    
-    .jest-browser-reporter .source-code .operator {
-        color: #c9d1d9;
-    }
+    .jest-browser-reporter .source-code .keyword { color: #ff7b72; }
+    .jest-browser-reporter .source-code .string { color: #a5d6ff; }
+    .jest-browser-reporter .source-code .number { color: #79c0ff; }
+    .jest-browser-reporter .source-code .constant { color: #ffa657; }
+    .jest-browser-reporter .source-code .comment { color: #8b949e; }
+    .jest-browser-reporter .source-code .function { color: #d2a8ff; }
+    .jest-browser-reporter .source-code .operator { color: #c9d1d9; }
+    .jest-browser-reporter .source-code .jest { color: #ff85a0; }
+    .jest-browser-reporter .source-code .type { color: #79c0ff; }
+    .jest-browser-reporter .source-code .matcher { color: #ffb657; }
 }`;
+
+function basicHighlight(code: string): string {
+    if (!code) return '';
+
+    // Escape HTML first
+    let escaped = escapeHtml(code);
+
+    // Highlight comments first
+    escaped = escaped
+        .replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="comment">$1</span>') // multi-line
+        .replace(/(\/\/[^\n]*)/g, '<span class="comment">$1</span>');       // single-line
+
+    // Highlight strings (single, double, template)
+    escaped = escaped
+        .replace(/(`[\s\S]*?`)/g, '<span class="string">$1</span>')
+        .replace(/(&quot;[^&quot;]*&quot;)/g, '<span class="string">$1</span>')
+        .replace(/('[^']*')/g, '<span class="string">$1</span>');
+
+    // Highlight Jest hooks + JS keywords
+    const jestAndKeywords = [
+        'describe', 'it', 'test', 'fit', 'xit', 'beforeEach', 'afterEach', 'beforeAll', 'afterAll', 'expect', 'fail', 'done',
+        'function', 'const', 'let', 'var', 'if', 'else', 'for', 'while', 'return', 'try', 'catch', 'finally', 'throw',
+        'new', 'this', 'class', 'async', 'await'
+    ].join('|');
+
+    escaped = escaped.replace(new RegExp(`\\b(${jestAndKeywords})\\b`, 'g'), (match) => {
+        const jestSet = new Set(['describe', 'it', 'test', 'fit', 'xit', 'beforeEach', 'afterEach', 'beforeAll', 'afterAll', 'expect', 'fail', 'done']);
+        return jestSet.has(match) ? `<span class="jest">${match}</span>` : `<span class="keyword">${match}</span>`;
+    });
+
+    // TypeScript types
+    escaped = escaped.replace(/\b(string|number|boolean|any|unknown|void|never|readonly|enum|interface|type|abstract|private|protected|public|static)\b/g,
+        '<span class="type">$1</span>');
+
+    // Jest matchers
+    const matchers = [
+        'toBe', 'toEqual', 'toStrictEqual', 'toHaveBeenCalled', 'toHaveBeenCalledTimes', 'toHaveBeenCalledWith',
+        'toHaveLength', 'toContain', 'toThrow', 'toThrowError', 'toMatchObject', 'toBeTruthy', 'toBeFalsy', 'toHaveProperty'
+    ].join('|');
+    escaped = escaped.replace(new RegExp(`\\b(${matchers})\\b`, 'g'), '<span class="matcher">$1</span>');
+
+    // Constants
+    escaped = escaped.replace(/\b(true|false|null|undefined|NaN|Infinity)\b/g, '<span class="constant">$1</span>');
+
+    // Numbers (integer & decimal)
+    escaped = escaped.replace(/\b(\d+(\.\d+)?)\b/g, '<span class="number">$1</span>');
+
+    return escaped;
+}
+
+
 
 /**
  * Formats source code for HTML display by removing function wrappers and normalizing indentation
@@ -81,22 +130,7 @@ export function formatSourceCodeHtml(sourceCode: string | undefined | null): str
     return `<div class="source-code"><pre>${highlightedCode}</pre></div>`;
 }
 
-/**
- * Basic highlighting that's guaranteed to work
- */
-function basicHighlight(code: string): string {
-    if (!code) return '';
 
-    // Escape HTML first
-    let escaped = escapeHtml(code);
-
-    // Apply only the most basic highlighting
-    return escaped
-        .replace(/\b(function|const|let|var|if|else|for|while|return|try|catch|finally|throw|new|this|class|async|await)\b/g,
-            '<span class="keyword">$1</span>')
-        .replace(/(\/\/[^\n]*)/g, '<span class="comment">$1</span>')
-        .replace(/(&quot;[^&quot;]*&quot;|'[^']*')/g, '<span class="string">$1</span>');
-}
 
 /**
  * Removes function wrappers from source code while preserving the actual test code
