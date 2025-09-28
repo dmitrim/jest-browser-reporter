@@ -7,6 +7,7 @@ import del from 'rollup-plugin-delete';
 import copy from "rollup-plugin-copy";
 import fs from 'fs';
 import path from 'path';
+import postcss from 'rollup-plugin-postcss';
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -49,6 +50,10 @@ export default [
       nodeResolve(),
       commonjs(),
       typescript({ useTsconfigDeclarationDir: true }),
+	  postcss({
+        extensions: ['.css'],
+        inject: true
+	  }),
       isProd && terser(),
 	  copy({
         targets: getCopyTargets(),
@@ -68,6 +73,10 @@ export default [
       nodeResolve(),
       commonjs(),
       typescript({ useTsconfigDeclarationDir: true }),
+	  postcss({
+        extensions: ['.css'],
+        inject: true
+	  }),
       isProd && terser()
     ]
   },
@@ -84,6 +93,10 @@ export default [
       nodeResolve(),
       commonjs(),
       typescript({ useTsconfigDeclarationDir: true }),
+	  postcss({
+        extensions: ['.css'],
+        inject: true
+	  }),
       isProd && terser()
     ]
   }

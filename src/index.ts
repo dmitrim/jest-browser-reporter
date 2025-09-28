@@ -1,5 +1,5 @@
 import { runJestLite } from "./JestLiteUtils";
-import { HighlightingStyles, formatSourceCodeHtml } from "./utils/SourceCodeFormat";
+import { ERRORS_STYLES, formatErrorsHtml, formatSourceCodeHtml } from "./utils/SourceCodeFormat";
 
 export { setupJestLiteGlobals } from "./JestLiteUtils";
 
@@ -167,23 +167,8 @@ const STYLES = `
     color: #1e293b;
 }
 
-/* Enhanced error details */
-.jest-browser-reporter .error-details { 
-    display: none; 
-    margin-top: 12px; 
-    padding: 12px; 
-    background-color: #fef2f2; 
-    border-radius: 6px; 
-    border-left: 4px solid #ef4444; 
-}
-.jest-browser-reporter .error-details pre { 
-    white-space: pre-wrap; 
-    font-family: 'Consolas', 'Monaco', monospace; 
-    font-size: 13px; 
-    color: #991b1b; 
-    overflow-x: auto; 
-    line-height: 1.4;
-}
+/* error details */
+${ERRORS_STYLES}
 
 /* Source code display */
 .jest-browser-reporter .source-code { 
@@ -429,9 +414,7 @@ const STYLES = `
         box-shadow: none;
         border: 1px solid #ccc;
     }
-}
-${HighlightingStyles}
-`;
+}`;
 
 export class JestBrowserReporter {
     options: JestBrowserReporterOptions;
@@ -1052,9 +1035,8 @@ export class JestBrowserReporter {
             </div>
         ` : '';
 
-        const errorHtml = test.status === 'fail' && test.errors?.length ? `
-            <div class="error-details"><pre>${this.escapeHtml(test.errors.join('\n\n'))}</pre></div>
-        ` : '';
+        const errorHtml = test.status === 'fail' && test.errors?.length ? formatErrorsHtml(test.errors) : '';
+
         const sourceCodeHtml: string = formatSourceCodeHtml(sourceCode);
 
         const durationHtml = test.status === 'skip'

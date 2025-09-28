@@ -1,114 +1,10 @@
-// SourceCodeFormat.ts
+import Prism from 'prismjs';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/components/prism-typescript';
+import 'prismjs/components/prism-jsx';
+import 'prismjs/components/prism-tsx';
+import './prism-ghcolors.css';
 
-export const HighlightingStyles = `/* Enhanced syntax highlighting styles */
-.jest-browser-reporter .source-code .keyword {
-    color: #d73a49;
-    font-weight: 600;
-}
-
-.jest-browser-reporter .source-code .string {
-    color: #032f62;
-}
-
-.jest-browser-reporter .source-code .number {
-    color: #005cc5;
-}
-
-.jest-browser-reporter .source-code .constant {
-    color: #e36209;
-}
-
-.jest-browser-reporter .source-code .comment {
-    color: #6a737d;
-    font-style: italic;
-}
-
-.jest-browser-reporter .source-code .function {
-    color: #6f42c1;
-}
-
-.jest-browser-reporter .source-code .operator {
-    color: #5a32a3;
-    font-weight: 600;
-}
-
-.jest-browser-reporter .source-code .jest {
-    color: #99425b;
-    font-weight: 600;
-}
-
-.jest-browser-reporter .source-code .type {
-    color: #005cc5;       /* TypeScript types */
-    font-style: italic;
-}
-
-.jest-browser-reporter .source-code .matcher {
-    color: #d18616;       /* Jest matchers */
-    font-weight: 600;
-}
-
-/* Optional: Dark theme variant */
-@media (prefers-color-scheme: dark) {
-    .jest-browser-reporter .source-code .keyword { color: #ff7b72; }
-    .jest-browser-reporter .source-code .string { color: #a5d6ff; }
-    .jest-browser-reporter .source-code .number { color: #79c0ff; }
-    .jest-browser-reporter .source-code .constant { color: #ffa657; }
-    .jest-browser-reporter .source-code .comment { color: #8b949e; }
-    .jest-browser-reporter .source-code .function { color: #d2a8ff; }
-    .jest-browser-reporter .source-code .operator { color: #c9d1d9; }
-    .jest-browser-reporter .source-code .jest { color: #ff85a0; }
-    .jest-browser-reporter .source-code .type { color: #79c0ff; }
-    .jest-browser-reporter .source-code .matcher { color: #ffb657; }
-}`;
-
-function basicHighlight(code: string): string {
-    if (!code) return '';
-
-    // Escape HTML first
-    let escaped = escapeHtml(code);
-
-    // Highlight comments first
-    escaped = escaped
-        .replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="comment">$1</span>') // multi-line
-        .replace(/(\/\/[^\n]*)/g, '<span class="comment">$1</span>');       // single-line
-
-    // Highlight strings (single, double, template)
-    escaped = escaped
-        .replace(/(`[\s\S]*?`)/g, '<span class="string">$1</span>')
-        .replace(/(&quot;[^&quot;]*&quot;)/g, '<span class="string">$1</span>')
-        .replace(/('[^']*')/g, '<span class="string">$1</span>');
-
-    // Highlight Jest hooks + JS keywords
-    const jestAndKeywords = [
-        'describe', 'it', 'test', 'fit', 'xit', 'beforeEach', 'afterEach', 'beforeAll', 'afterAll', 'expect', 'fail', 'done',
-        'function', 'const', 'let', 'var', 'if', 'else', 'for', 'while', 'return', 'try', 'catch', 'finally', 'throw',
-        'new', 'this', 'class', 'async', 'await'
-    ].join('|');
-
-    escaped = escaped.replace(new RegExp(`\\b(${jestAndKeywords})\\b`, 'g'), (match) => {
-        const jestSet = new Set(['describe', 'it', 'test', 'fit', 'xit', 'beforeEach', 'afterEach', 'beforeAll', 'afterAll', 'expect', 'fail', 'done']);
-        return jestSet.has(match) ? `<span class="jest">${match}</span>` : `<span class="keyword">${match}</span>`;
-    });
-
-    // TypeScript types
-    escaped = escaped.replace(/\b(string|number|boolean|any|unknown|void|never|readonly|enum|interface|type|abstract|private|protected|public|static)\b/g,
-        '<span class="type">$1</span>');
-
-    // Jest matchers
-    const matchers = [
-        'toBe', 'toEqual', 'toStrictEqual', 'toHaveBeenCalled', 'toHaveBeenCalledTimes', 'toHaveBeenCalledWith',
-        'toHaveLength', 'toContain', 'toThrow', 'toThrowError', 'toMatchObject', 'toBeTruthy', 'toBeFalsy', 'toHaveProperty'
-    ].join('|');
-    escaped = escaped.replace(new RegExp(`\\b(${matchers})\\b`, 'g'), '<span class="matcher">$1</span>');
-
-    // Constants
-    escaped = escaped.replace(/\b(true|false|null|undefined|NaN|Infinity)\b/g, '<span class="constant">$1</span>');
-
-    // Numbers (integer & decimal)
-    escaped = escaped.replace(/\b(\d+(\.\d+)?)\b/g, '<span class="number">$1</span>');
-
-    return escaped;
-}
 
 
 
@@ -117,17 +13,17 @@ function basicHighlight(code: string): string {
  * @param sourceCode - The raw source code string to format
  * @returns HTML string with formatted source code
  */
-export function formatSourceCodeHtml(sourceCode: string | undefined | null): string {
-    if (!sourceCode)
-        return "";
+export function formatSourceCodeHtml(sourceCode: string | undefined | null, lang: 'javascript' | 'typescript' | 'tsx' = 'typescript'): string {
+    if (!sourceCode) return '';
 
-    // Remove function wrappers and clean up the code
+    // Remove wrapper if needed
     const cleanedCode = removeFunctionWrapper(sourceCode);
 
-    // Apply basic syntax highlighting
-    const highlightedCode = basicHighlight(cleanedCode);
+    // Highlight code using Prism
+    const highlightedCode = Prism.highlight(cleanedCode, Prism.languages[lang], lang);
 
-    return `<div class="source-code"><pre>${highlightedCode}</pre></div>`;
+    // Wrap in pre/code for HTML display
+    return `<div class="source-code"><pre class="language-${lang}"><code>${highlightedCode}</code></pre></div>`;
 }
 
 
@@ -296,3 +192,50 @@ export function escapeHtmlWithFormatting(value: string): string {
         .replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;') // Convert tabs to 4 spaces
         .replace(/\n/g, '<br>');  // Preserve line breaks
 }
+
+
+export function formatErrorsHtml(errors: string[]): string {
+    if (!errors?.length) return '';
+
+    const errorText = errors.join('\n\n');
+    const highlighted = Prism.highlight(errorText, Prism.languages.javascript, 'javascript');
+
+    return `<div class="error-details"><pre class="error-output">${highlighted}</pre></div>`;
+}
+
+export const ERRORS_STYLES = `/* Error details styling */
+.jest-browser-reporter .error-details { 
+    display: none; 
+    margin-top: 12px; 
+    padding: 12px 14px; 
+    background: #fff7f7;
+    border-radius: 6px; 
+    border-left: 4px solid #ef4444; 
+}
+
+.jest-browser-reporter .error-details pre.error-output { 
+    white-space: pre-wrap; 
+    font-family: 'Consolas', 'Monaco', monospace; 
+    font-size: 13px; 
+    color: #991b1b; 
+    line-height: 1.45;
+    margin: 0;
+    overflow-x: auto;
+}
+
+/* Use Prism theme colors for consistency */
+.jest-browser-reporter .error-details .token.keyword { color: #b91c1c; }
+.jest-browser-reporter .error-details .token.string { color: #9a3412; }
+.jest-browser-reporter .error-details .token.function { color: #7f1d1d; }
+.jest-browser-reporter .error-details .token.number { color: #7c2d12; }
+
+/* Dark theme */
+@media (prefers-color-scheme: dark) {
+    .jest-browser-reporter .error-details {
+        background: #2a1e1e;
+        border-left-color: #f87171;
+    }
+    .jest-browser-reporter .error-details pre.error-output {
+        color: #fca5a5;
+    }
+}`;
