@@ -882,19 +882,14 @@ export class JestBrowserReporter {
      */
     private getTestSourceCode(testName: string): string | null {
         try {
-            const sourceMap = (globalThis as any).__JESTLITE_TEST_SOURCE_MAP__;
-            console.log("getTestSourceCode:", sourceMap);
-            console.log("getTestSourceCode, testName:", testName);
-            console.log("getTestSourceCode, sourceMap[testName]:", sourceMap[testName]);
-            
+            const sourceMap = (globalThis as any).__JESTLITE_TEST_SOURCE_MAP__;            
             if (sourceMap && sourceMap.has(testName)) {
                 const sourceInfo = sourceMap.get(testName);
-                console.log("getTestSourceCode, sourceInfo:", sourceInfo);
                 return sourceInfo?.formatted || sourceInfo?.source || null;
             }
             return null;
         } catch (error) {
-            console.warn('Could not get test source code:', error);
+            //console.warn('Could not get test source code:', error);
             return null;
         }
     }
