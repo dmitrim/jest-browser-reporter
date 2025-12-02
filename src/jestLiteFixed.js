@@ -1127,6 +1127,11 @@ Use jest.setTimeout(newTimeout) to increase the timeout value, if this is a long
                 t.setState = (t2) => e2[s] = t2, t.dispatch = (e3) => {
                     for (const t2 of u)
                         t2(e3, p());
+                    //dma:
+                    try {
+                        document.dispatchEvent(new CustomEvent("jestlite_event", { detail: e3 }));
+                    } catch { }
+                    //:dma
                 }, t.addEventHandler = (e3) => {
                     u.push(e3);
                 };
@@ -8416,8 +8421,8 @@ ${d}` : "") + h.replace(/AssertionError(.*)/g, "");
             o.only = (e2, t2) => i(t2, e2, "only"), o.skip = (e2, t2) => i(t2, e2, "skip");
             const i = (e2, t2, n2) => {
                 (0, r.dispatch)({ blockName: t2, mode: n2, name: "start_describe_definition" }), e2(), (0, r.dispatch)({ name: "finish_describe_definition" });
-            }, a = (e2, t2) => (0, r.dispatch)({ fn: e2, hookType: t2, name: "add_hook" }), u = (e2, t2, timeout) => (0, r.dispatch)({ fn: t2, name: "add_test", testName: e2, timeout }), c = u;
-            u.skip = (e2, t2) => (0, r.dispatch)({ fn: t2, mode: "skip", name: "add_test", testName: e2, timeout }), u.only = (e2, t2) => (0, r.dispatch)({ fn: t2, mode: "only", name: "add_test", testName: e2, timeout }), e.exports = { afterAll: (e2) => a(e2, "afterAll"), afterEach: (e2) => a(e2, "afterEach"), beforeAll: (e2) => a(e2, "beforeAll"), beforeEach: (e2) => a(e2, "beforeEach"), describe: o, it: c, test: u };
+            }, a = (e2, t2) => (0, r.dispatch)({ fn: e2, hookType: t2, name: "add_hook" }), u = (e2, t2, timeout) => (0, r.dispatch)({ fn: t2, name: "add_test", testName: e2, timeout: timeout }), c = u;
+            u.skip = (e2, t2, timeout) => (0, r.dispatch)({ fn: t2, mode: "skip", name: "add_test", testName: e2, timeout: timeout }), u.only = (e2, t2, timeout) => (0, r.dispatch)({ fn: t2, mode: "only", name: "add_test", testName: e2, timeout: timeout }), e.exports = { afterAll: (e2) => a(e2, "afterAll"), afterEach: (e2) => a(e2, "afterEach"), beforeAll: (e2) => a(e2, "beforeAll"), beforeEach: (e2) => a(e2, "beforeEach"), describe: o, it: c, test: u };
         }]);
     });
 });

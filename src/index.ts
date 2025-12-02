@@ -465,6 +465,8 @@ export class JestBrowserReporter {
         this.isRunning = true;
         this.updateRunButtonsState(true);
 
+        this.bindJestEvents();
+
         (globalThis as any).__JESTLITE_TEST_NAME_FILTER__ = testNameFilter || undefined;
         this.showRunningIndicator(testNameFilter ? `Running tests matching: "${testNameFilter}"` : 'Running all tests...');
 
@@ -480,7 +482,46 @@ export class JestBrowserReporter {
             this.isRunning = false;
             this.updateRunButtonsState(false);
             this.hideRunningIndicator();
+
+            this.unbindJestEvents();
         }
+    }
+
+    _jestEventsHandler: any;
+
+    bindJestEvents() {
+
+        //console.log("(globalThis as any).__JESTLITE_TEST_SOURCE_MAP__", (globalThis as any).__JESTLITE_TEST_SOURCE_MAP__);
+
+        this._jestEventsHandler = (e: Event) => {
+            const customEvent = e as CustomEvent;
+            const data = customEvent.detail;
+
+          //  console.log("jest customEvent", customEvent);
+          //  console.log("jest customEvent.data", data);
+            
+
+            let actionName = data.name;
+            switch (actionName) {
+                case "test_start":
+                    actionName = "Running test"
+                    break;
+                default:
+                    return;
+            }
+            const testObj = data.test;
+            let currentStatusMsg = `${actionName}`;
+            if (testObj) {
+                currentStatusMsg += ` "${testObj.name}"`;
+            }
+            this.showRunningIndicator(undefined, currentStatusMsg);
+            
+        };
+        document.addEventListener("jestlite_event", this._jestEventsHandler);
+    }
+
+    unbindJestEvents() {
+        document.removeEventListener("jestlite_event", this._jestEventsHandler);
     }
 
     /**
@@ -531,11 +572,19 @@ export class JestBrowserReporter {
         });
     }
 
+    _prevRunningMessage: any;
+
     /**
      * Show running indicator with custom message
      */
-    private showRunningIndicator(message: string = 'Running tests…') {
+    private showRunningIndicator(message?: string, statusMessage?: string) {
         if (!this.elements || !this.elements.container) return;
+
+        message = message || this._prevRunningMessage;
+        if (!message)
+            message = 'Running tests…';
+
+        this._prevRunningMessage = message;
 
         let indicator = this.elements.container.querySelector('.running-indicator') as HTMLElement | null;
         if (!indicator) {
@@ -548,11 +597,18 @@ export class JestBrowserReporter {
                 this.elements.container.insertBefore(indicator, this.elements.container.firstChild);
             }
         }
-
-        indicator.innerHTML = `
+        if (statusMessage) {
+            indicator.innerHTML = `
+            <div class="running-spinner"></div>
+            <span class="running-text">${this.escapeHtml(message)}<br /><span class="running-status-text">${statusMessage}</span></span>
+        `;
+        } else {
+            indicator.innerHTML = `
             <div class="running-spinner"></div>
             <span class="running-text">${this.escapeHtml(message)}</span>
         `;
+        }
+        
         indicator.classList.remove('hidden');
 
         const testResults = this.elements.container.querySelector('.test-results') as HTMLElement | null;
