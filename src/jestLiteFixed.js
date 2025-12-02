@@ -3880,6 +3880,9 @@ Use jest.setTimeout(newTimeout) to increase the timeout value, if this is a long
                         case "add_test": {
                             const e3 = n2.currentDescribeBlock, o2 = t2.fn, i = t2.mode, a = t2.testName, u = (0, r.makeTest)(o2, i, a, e3);
 
+                            // handle timeout arg
+                            u.timeout = t2.timeout;
+
                             // Capture source code of the test function - PRESERVE ORIGINAL FORMATTING
                             if (o2 && typeof o2 === 'function') {
                                 try {
@@ -8390,11 +8393,11 @@ ${d}` : "") + h.replace(/AssertionError(.*)/g, "");
             var l;
             const p = (e2, t2) => {
                 (0, r.dispatch)({ hook: e2, name: "hook_start" });
-                const n2 = (0, r.getState)().testTimeout;
+                const n2 = e2.timeout || globalThis.__JESTLITE_TEST_TIMEOUT || (0, r.getState)().testTimeout;
                 return (0, o.callAsyncFn)(e2.fn, t2, { isHook: true, timeout: n2 }).then(() => (0, r.dispatch)({ hook: e2, name: "hook_success" })).catch((t3) => (0, r.dispatch)({ error: t3, hook: e2, name: "hook_failure" }));
             }, h = (d = i(function* (e2, t2) {
                 (0, r.dispatch)({ name: "test_start", test: e2 });
-                const n2 = (0, r.getState)().testTimeout;
+                const n2 = e2.timeout || globalThis.__JESTLITE_TEST_TIMEOUT || (0, r.getState)().testTimeout;
                 if (!e2.fn)
                     throw Error("Tests with no 'fn' should have 'mode' set to 'skipped'");
                 return (0, o.callAsyncFn)(e2.fn, t2, { isHook: false, timeout: n2 }).then(function () {
@@ -8413,8 +8416,8 @@ ${d}` : "") + h.replace(/AssertionError(.*)/g, "");
             o.only = (e2, t2) => i(t2, e2, "only"), o.skip = (e2, t2) => i(t2, e2, "skip");
             const i = (e2, t2, n2) => {
                 (0, r.dispatch)({ blockName: t2, mode: n2, name: "start_describe_definition" }), e2(), (0, r.dispatch)({ name: "finish_describe_definition" });
-            }, a = (e2, t2) => (0, r.dispatch)({ fn: e2, hookType: t2, name: "add_hook" }), u = (e2, t2) => (0, r.dispatch)({ fn: t2, name: "add_test", testName: e2 }), c = u;
-            u.skip = (e2, t2) => (0, r.dispatch)({ fn: t2, mode: "skip", name: "add_test", testName: e2 }), u.only = (e2, t2) => (0, r.dispatch)({ fn: t2, mode: "only", name: "add_test", testName: e2 }), e.exports = { afterAll: (e2) => a(e2, "afterAll"), afterEach: (e2) => a(e2, "afterEach"), beforeAll: (e2) => a(e2, "beforeAll"), beforeEach: (e2) => a(e2, "beforeEach"), describe: o, it: c, test: u };
+            }, a = (e2, t2) => (0, r.dispatch)({ fn: e2, hookType: t2, name: "add_hook" }), u = (e2, t2, timeout) => (0, r.dispatch)({ fn: t2, name: "add_test", testName: e2, timeout }), c = u;
+            u.skip = (e2, t2) => (0, r.dispatch)({ fn: t2, mode: "skip", name: "add_test", testName: e2, timeout }), u.only = (e2, t2) => (0, r.dispatch)({ fn: t2, mode: "only", name: "add_test", testName: e2, timeout }), e.exports = { afterAll: (e2) => a(e2, "afterAll"), afterEach: (e2) => a(e2, "afterEach"), beforeAll: (e2) => a(e2, "beforeAll"), beforeEach: (e2) => a(e2, "beforeEach"), describe: o, it: c, test: u };
         }]);
     });
 });

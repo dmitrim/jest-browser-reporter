@@ -1,6 +1,6 @@
 {
   "name": "@dmarfin/jest-browser-reporter",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A beautiful browser-based test results reporter for Jest Lite",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",

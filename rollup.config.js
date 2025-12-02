@@ -5,8 +5,6 @@ import typescript from 'rollup-plugin-typescript2';
 import del from 'rollup-plugin-delete';
 
 import copy from "rollup-plugin-copy";
-import fs from 'fs';
-import path from 'path';
 import postcss from 'rollup-plugin-postcss';
 
 const isProd = process.env.NODE_ENV === 'production';

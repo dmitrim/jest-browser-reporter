@@ -127,6 +127,10 @@ export function setupJestLiteGlobals(): void {
             console.warn(`jest.spyOn not implemented for: ${method}`);
             return obj[method];
         },
+
+        setTimeout: (val: number) => {
+            (globalThis as any).__JESTLITE_TEST_TIMEOUT = val;
+        }
     };
 
 }
