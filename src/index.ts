@@ -248,6 +248,7 @@ ${ERRORS_STYLES}
     justify-content: center;
     gap: 12px;
     border: 2px dashed #e2e8f0;
+    min-height: 74px; /* Fixed height to prevent layout jumps */
 }
 .jest-browser-reporter .running-indicator.hidden { display: none; }
 
@@ -258,6 +259,29 @@ ${ERRORS_STYLES}
     border-top: 3px solid #4a6ee0;
     border-radius: 50%;
     animation: spin 1s linear infinite;
+    flex-shrink: 0; /* Prevent spinner from shrinking */
+}
+
+.jest-browser-reporter .running-text {
+    text-align: left;
+    min-width: 0; /* Allow text to shrink if needed */
+    flex: 1;
+}
+
+.jest-browser-reporter .running-main-text {
+    display: block;
+    margin-bottom: 4px;
+}
+
+.jest-browser-reporter .running-status-text {
+    display: block;
+    font-size: 14px;
+    font-weight: normal;
+    color: #64748b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 500px;
 }
 
 /* Enhanced run buttons */
@@ -367,6 +391,9 @@ ${ERRORS_STYLES}
     .jest-browser-reporter .test-actions { flex-direction: column; align-items: flex-start; }
     .jest-browser-reporter .toggle-error,
     .jest-browser-reporter .toggle-source { margin-right: 0; margin-bottom: 8px; }
+    .jest-browser-reporter .running-status-text {
+        max-width: 200px;
+    }
 }
 
 /* Keyboard shortcut hint */
@@ -429,6 +456,9 @@ export class JestBrowserReporter {
         tableBody: Element | null;
         searchInput: HTMLInputElement | null;
         searchClear: HTMLElement | null;
+        runningIndicator?: HTMLElement | null;
+        runningStatusText?: HTMLElement | null;
+        runningMainText?: HTMLElement | null;
     } | undefined;
     private searchHandler?: (e: Event) => void;
     private clearHandler?: (e: Event) => void;
@@ -490,21 +520,14 @@ export class JestBrowserReporter {
     _jestEventsHandler: any;
 
     bindJestEvents() {
-
-        //console.log("(globalThis as any).__JESTLITE_TEST_SOURCE_MAP__", (globalThis as any).__JESTLITE_TEST_SOURCE_MAP__);
-
         this._jestEventsHandler = (e: Event) => {
             const customEvent = e as CustomEvent;
             const data = customEvent.detail;
 
-          //  console.log("jest customEvent", customEvent);
-          //  console.log("jest customEvent.data", data);
-            
-
             let actionName = data.name;
             switch (actionName) {
                 case "test_start":
-                    actionName = "Running test"
+                    actionName = "Running test";
                     break;
                 default:
                     return;
@@ -512,16 +535,33 @@ export class JestBrowserReporter {
             const testObj = data.test;
             let currentStatusMsg = `${actionName}`;
             if (testObj) {
-                currentStatusMsg += ` "${testObj.name}"`;
+                currentStatusMsg += `: ${testObj.name}`;
             }
-            this.showRunningIndicator(undefined, currentStatusMsg);
-            
+            this.updateRunningStatus(currentStatusMsg);
         };
         document.addEventListener("jestlite_event", this._jestEventsHandler);
     }
 
     unbindJestEvents() {
         document.removeEventListener("jestlite_event", this._jestEventsHandler);
+    }
+
+    /**
+     * Update only the status text without replacing the entire indicator
+     */
+    private updateRunningStatus(statusMessage: string) {
+        if (!this.elements?.runningStatusText) {
+            // If elements not initialized yet, fall back to the old method
+            this.showRunningIndicator(undefined, statusMessage);
+            return;
+        }
+
+        this.elements.runningStatusText.textContent = this.escapeHtml(statusMessage);
+
+        // Ensure indicator is visible
+        if (this.elements.runningIndicator) {
+            this.elements.runningIndicator.classList.remove('hidden');
+        }
     }
 
     /**
@@ -536,8 +576,8 @@ export class JestBrowserReporter {
         errorDiv.style.borderColor = '#fecaca';
         errorDiv.style.color = '#dc2626';
         errorDiv.innerHTML = `
-            <span style="font-size: 24px;">⚠️</span>
-            <span>${this.escapeHtml(message)}</span>
+            <span style="font-size: 24px; flex-shrink: 0;">⚠️</span>
+            <span class="running-text">${this.escapeHtml(message)}</span>
         `;
 
         const existingIndicator = this.elements.container.querySelector('.running-indicator');
@@ -597,19 +637,22 @@ export class JestBrowserReporter {
                 this.elements.container.insertBefore(indicator, this.elements.container.firstChild);
             }
         }
-        if (statusMessage) {
-            indicator.innerHTML = `
+
+        // Create structured HTML with separate elements for each part
+        indicator.innerHTML = `
             <div class="running-spinner"></div>
-            <span class="running-text">${this.escapeHtml(message)}<br /><span class="running-status-text">${statusMessage}</span></span>
+            <div class="running-text">
+                <span class="running-main-text">${this.escapeHtml(message)}</span>
+                ${statusMessage ? `<span class="running-status-text">${this.escapeHtml(statusMessage)}</span>` : ''}
+            </div>
         `;
-        } else {
-            indicator.innerHTML = `
-            <div class="running-spinner"></div>
-            <span class="running-text">${this.escapeHtml(message)}</span>
-        `;
-        }
-        
+
         indicator.classList.remove('hidden');
+
+        // Store references to important elements for later updates
+        this.elements.runningIndicator = indicator;
+        this.elements.runningMainText = indicator.querySelector('.running-main-text') as HTMLElement | null;
+        this.elements.runningStatusText = indicator.querySelector('.running-status-text') as HTMLElement | null;
 
         const testResults = this.elements.container.querySelector('.test-results') as HTMLElement | null;
         if (testResults) {
@@ -627,6 +670,11 @@ export class JestBrowserReporter {
         if (indicator) {
             indicator.classList.add('hidden');
         }
+
+        // Clear element references
+        this.elements.runningIndicator = null;
+        this.elements.runningMainText = null;
+        this.elements.runningStatusText = null;
 
         const testResults = this.elements.container.querySelector('.test-results') as HTMLElement | null;
         if (testResults) {
@@ -938,14 +986,13 @@ export class JestBrowserReporter {
      */
     private getTestSourceCode(testName: string): string | null {
         try {
-            const sourceMap = (globalThis as any).__JESTLITE_TEST_SOURCE_MAP__;            
+            const sourceMap = (globalThis as any).__JESTLITE_TEST_SOURCE_MAP__;
             if (sourceMap && sourceMap.has(testName)) {
                 const sourceInfo = sourceMap.get(testName);
                 return sourceInfo?.formatted || sourceInfo?.source || null;
             }
             return null;
         } catch (error) {
-            //console.warn('Could not get test source code:', error);
             return null;
         }
     }
