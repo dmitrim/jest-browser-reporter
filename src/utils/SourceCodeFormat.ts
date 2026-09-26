@@ -5,9 +5,6 @@ import 'prismjs/components/prism-jsx';
 import 'prismjs/components/prism-tsx';
 import './prism-ghcolors.css';
 
-
-
-
 /**
  * Formats source code for HTML display by removing function wrappers and normalizing indentation
  * @param sourceCode - The raw source code string to format
@@ -25,8 +22,6 @@ export function formatSourceCodeHtml(sourceCode: string | undefined | null, lang
     // Wrap in pre/code for HTML display
     return `<div class="source-code"><pre class="language-${lang}"><code>${highlightedCode}</code></pre></div>`;
 }
-
-
 
 /**
  * Removes function wrappers from source code while preserving the actual test code
@@ -161,39 +156,6 @@ function normalizeIndentation(code: string): string {
 }
 
 
-/**
- * Simple HTML escape for safe insertion of text content
- * Prevents XSS attacks and ensures proper HTML rendering
- */
-export function escapeHtml(value: string): string {
-    if (!value) return '';
-
-    return String(value)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
-
-/**
- * Enhanced HTML escape that preserves formatting for pre tags
- */
-export function escapeHtmlWithFormatting(value: string): string {
-    if (!value) return '';
-
-    return String(value)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;')
-        .replace(/ /g, '&nbsp;')  // Preserve spaces
-        .replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;') // Convert tabs to 4 spaces
-        .replace(/\n/g, '<br>');  // Preserve line breaks
-}
-
-
 export function formatErrorsHtml(errors: string[]): string {
     if (!errors?.length) return '';
 
@@ -202,40 +164,3 @@ export function formatErrorsHtml(errors: string[]): string {
 
     return `<div class="error-details"><pre class="error-output">${highlighted}</pre></div>`;
 }
-
-export const ERRORS_STYLES = `/* Error details styling */
-.jest-browser-reporter .error-details { 
-    display: none; 
-    margin-top: 12px; 
-    padding: 12px 14px; 
-    background: #fff7f7;
-    border-radius: 6px; 
-    border-left: 4px solid #ef4444; 
-}
-
-.jest-browser-reporter .error-details pre.error-output { 
-    white-space: pre-wrap; 
-    font-family: 'Consolas', 'Monaco', monospace; 
-    font-size: 13px; 
-    color: #991b1b; 
-    line-height: 1.45;
-    margin: 0;
-    overflow-x: auto;
-}
-
-/* Use Prism theme colors for consistency */
-.jest-browser-reporter .error-details .token.keyword { color: #b91c1c; }
-.jest-browser-reporter .error-details .token.string { color: #9a3412; }
-.jest-browser-reporter .error-details .token.function { color: #7f1d1d; }
-.jest-browser-reporter .error-details .token.number { color: #7c2d12; }
-
-/* Dark theme */
-@media (prefers-color-scheme: dark) {
-    .jest-browser-reporter .error-details {
-        background: #2a1e1e;
-        border-left-color: #f87171;
-    }
-    .jest-browser-reporter .error-details pre.error-output {
-        color: #fca5a5;
-    }
-}`;

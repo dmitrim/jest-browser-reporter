@@ -3,13 +3,18 @@
     "allowJs": true,
     "target": "ES2017",
     "module": "ESNext",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "declaration": true,
     "declarationDir": "dist/types",
     "outDir": "dist/temp",
     "strict": true,
     "moduleResolution": "node",
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "stripInternal": true,
+    "paths": {
+      "jest-browser-reporter": ["./src/index.ts"]
+    }
   },
   "include": ["src"]
 }

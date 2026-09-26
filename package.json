@@ -1,21 +1,18 @@
 {
-  "name": "@dmarfin/jest-browser-reporter",
-  "version": "1.0.3",
-  "description": "A beautiful browser-based test results reporter for Jest Lite",
-  "main": "dist/cjs/index.js",
-  "module": "dist/esm/index.js",
-  "browser": "dist/umd/index.js",
-  "types": "dist/types/index.d.ts",
-  "unpkg": "dist/index.umd.js",
-  "files": [
-    "dist",
-    "README.md"
-  ],
+  "name": "jest-browser-reporter",
+  "version": "2.0.0",
+  "description": "Run Jest-style tests in the browser and see the results live on the page",
   "scripts": {
-    "build": "set NODE_ENV=production&rollup -c",
-    "build-dev": "set NODE_ENV=development&rollup -c",
-    "dev": "set NODE_ENV=development&rollup -c -w",
-    "prepublishOnly": "npm run build"
+    "build": "cross-env NODE_ENV=production rollup -c && npm run docs",
+    "build:dev": "cross-env NODE_ENV=development rollup -c",
+    "dev": "cross-env NODE_ENV=development rollup -c -w",
+    "docs": "typedoc",
+    "test": "npm run test:unit && npm run check:examples && npm run test:e2e",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test",
+    "check:examples": "tsc -p tests/examples/tsconfig.json",
+    "package": "npm run build && npm pack ./dist",
+    "release": "npm run build && npm test && npm publish ./dist"
   },
   "keywords": [
     "jest",
@@ -28,19 +25,26 @@
   "author": "Dmitriy Marfin",
   "license": "MIT",
   "devDependencies": {
+    "@playwright/test": "1.56.1",
     "@rollup/plugin-commonjs": "^28.0.6",
     "@rollup/plugin-node-resolve": "^16.0.1",
+    "@rollup/plugin-terser": "^1.0.0",
     "@types/prismjs": "^1.26.5",
+    "cross-env": "^10.1.0",
+    "happy-dom": "^20.14.5",
     "postcss": "^8.5.6",
-    "rollup": "^2.79.2",
+    "rollup": "^4.63.5",
     "rollup-plugin-copy": "^3.5.0",
     "rollup-plugin-delete": "^3.0.1",
     "rollup-plugin-postcss": "^4.0.2",
-    "rollup-plugin-terser": "^7.0.2",
     "rollup-plugin-typescript2": "^0.36.0",
-    "typescript": "^5.9.2"
+    "typedoc": "^0.28.20",
+    "typescript": "^5.9.2",
+    "vite": "^6.4.3",
+    "vitest": "^5.0.2"
   },
   "dependencies": {
     "prismjs": "^1.30.0"
-  }
+  },
+  "private": true
 }

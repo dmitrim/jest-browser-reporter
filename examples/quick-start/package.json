@@ -1,0 +1,14 @@
+{
+  "name": "jest-browser-reporter-example-quick-start",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite"
+  },
+  "dependencies": {
+    "jest-browser-reporter": "^2.0.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}

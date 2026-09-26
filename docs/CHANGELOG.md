@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Changed
+- Sources split into modules: `reporter/` (reporter class, templates, running indicator, result helpers, `styles.css`), `runner/` (jest-lite wrapper and globals), `utils/`.
+- Reporter styles are injected when the module is imported, like the Prism theme.
+
+### Fixed
+- The "Test execution failed" banner was hidden right after being shown.
+- Expanding a collapsed suite group showed rows hidden by the current filter or search.
+- HTML entities (e.g. `&amp;`) appeared in the "Running test: …" status line.
+
 ## [1.0.3] - 2025-12-02
 ### Added
 - Now displays the name of the currently running test.

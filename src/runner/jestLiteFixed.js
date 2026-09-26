@@ -3885,28 +3885,8 @@ Use jest.setTimeout(newTimeout) to increase the timeout value, if this is a long
                         case "add_test": {
                             const e3 = n2.currentDescribeBlock, o2 = t2.fn, i = t2.mode, a = t2.testName, u = (0, r.makeTest)(o2, i, a, e3);
 
-                            // handle timeout arg
+                            //dma: per-test timeout (third argument of it/test)
                             u.timeout = t2.timeout;
-
-                            // Capture source code of the test function - PRESERVE ORIGINAL FORMATTING
-                            if (o2 && typeof o2 === 'function') {
-                                try {
-                                    // Store the original function source AS IS
-                                    u.sourceCode = o2.toString();
-
-                                    // Store in global map without formatting
-                                    if (!globalThis.__JESTLITE_TEST_SOURCE_MAP__) {
-                                        globalThis.__JESTLITE_TEST_SOURCE_MAP__ = new Map();
-                                    }
-                                    globalThis.__JESTLITE_TEST_SOURCE_MAP__.set(a, {
-                                        source: u.sourceCode,
-                                        // Don't format here - keep original
-                                        formatted: o2.toString()
-                                    });
-                                } catch (error) {
-                                    // Silent fail - source code capture is optional
-                                }
-                            }
 
                             u.mode === "only" && (n2.hasFocusedTests = true), e3.tests.push(u);
                             break;
@@ -3917,6 +3897,11 @@ Use jest.setTimeout(newTimeout) to increase the timeout value, if this is a long
                         case "test_skip":
                             t2.test.status = "skip";
                             break;
+                        //dma:
+                        case "test_cancel":
+                            t2.test.status = "cancel";
+                            break;
+                        //:dma
                         case "test_failure":
                             t2.test.status = "fail", t2.test.duration = (0, r.getTestDuration)(t2.test), t2.test.errors.push(t2.error);
                             break;
@@ -8206,89 +8191,48 @@ ${d}` : "") + h.replace(/AssertionError(.*)/g, "");
             });
             var u;
 
-            //dma: added support for .skip and .only for describe blocks>>
-
-            /**
-             * Helper: determine if any test in this describe subtree has a name that matches the filter.
-             * This is used so that parent describes are executed when they contain matching tests.
-             */
-            function subtreeHasMatchingName(block, filter) {
-                if (!filter) return false;
-                // check tests in this block
-                for (const t3 of block.tests) {
-                    if (t3 && typeof t3.testName === "string" && t3.testName.indexOf(filter) !== -1)
-                        return true;
-                    // some representations may store name as 'name' or 'title'; try a fallback
-                    if (t3 && typeof t3.name === "string" && t3.name.indexOf(filter) !== -1)
-                        return true;
-                }
-                // recursively check children blocks
-                for (const ch of block.children) {
-                    if (subtreeHasMatchingName(ch, filter))
-                        return true;
-                    // also check describe name itself
-                    if (ch && typeof ch.name === "string" && ch.name.indexOf(filter) !== -1)
-                        return true;
-                }
-                return false;
+            //dma: test selection and cancellation.
+            // The reporter installs globalThis.__JESTLITE_RUN_HOOKS__ = { shouldRunTest(test, state), isAborted() }
+            // (src/runner/runner.ts) and so decides which tests run. Without it, the stock .only/.skip rules apply.
+            function shouldRunTest(test) {
+                const runHooks = globalThis.__JESTLITE_RUN_HOOKS__;
+                const state = (0, r.getState)();
+                if (runHooks) return !!runHooks.shouldRunTest(test, state);
+                return !!test.fn && test.mode !== "skip" && (!state.hasFocusedTests || test.mode === "only");
             }
 
-            /**
-             * Helper: determine whether any ancestor describe has a name matching the filter.
-             * Used to allow tests to run if their parent describe matches the filter.
-             */
-            function isInMatchedDescribe(node, filter) {
-                if (!filter) return false;
-                let current = node.parent;
-                while (current) {
-                    if (current.name && typeof current.name === "string" && current.name.indexOf(filter) !== -1)
-                        return true;
-                    current = current.parent;
+            function isRunAborted() {
+                const runHooks = globalThis.__JESTLITE_RUN_HOOKS__;
+                return !!(runHooks && runHooks.isAborted());
+            }
+
+            function subtreeHasTestsToRun(block) {
+                return block.tests.some(shouldRunTest) || block.children.some(subtreeHasTestsToRun);
+            }
+
+            // Reports every test of the subtree without running it:
+            // cancelled if it was selected but the run was aborted, skipped otherwise.
+            function reportNotRun(block) {
+                const aborted = isRunAborted();
+                for (const t3 of block.tests) {
+                    (0, r.dispatch)({ name: aborted && shouldRunTest(t3) ? "test_cancel" : "test_skip", test: t3 });
                 }
-                return false;
+                for (const ch of block.children) {
+                    reportNotRun(ch);
+                }
             }
 
             const c = (s = i(function* runDescribe(e2) {
-                const state = (0, r.getState)();
-                const testNameFilter = globalThis.__JESTLITE_TEST_NAME_FILTER__; // << read filter dynamically
-
                 const isRoot = !e2.parent;
 
-                // Determine whether this describe or its subtree matches the global name filter (if any)
-                const describeNameMatches = testNameFilter && e2.name && typeof e2.name === "string" && e2.name.indexOf(testNameFilter) !== -1;
-                const subtreeMatches = testNameFilter ? subtreeHasMatchingName(e2, testNameFilter) : false;
-                const shouldRunBecauseOfFilter = !!(testNameFilter && (describeNameMatches || subtreeMatches));
-
-                const hasOwnOnlyTests = e2.tests && e2.tests.some ? e2.tests.some(t => t.mode === "only") : false;
-
-
-                function markSkipped(block) {
-                    for (const t3 of block.tests) {
-                        (0, r.dispatch)({ name: "test_skip", test: t3 });
-                    }
-                    for (const ch of block.children) {
-                        markSkipped(ch);
-                    }
-                }
-
-                if (testNameFilter) {
-                    if (!isRoot && !shouldRunBecauseOfFilter) {
-                        (0, r.dispatch)({ describeBlock: e2, name: "run_describe_start" });
-                        markSkipped(e2);
-                        (0, r.dispatch)({ describeBlock: e2, name: "run_describe_finish" });
-                        return;
-                    }
-                } else {
-                    // Skip logic: if the block is .skip or ignored due to .only/focused tests
-                    if (!isRoot && (e2.mode === "skip" || (state.hasFocusedTests && !hasOwnOnlyTests && e2.mode !== "only"))) {
-                        (0, r.dispatch)({ describeBlock: e2, name: "run_describe_start" });
-                        markSkipped(e2);
-                        (0, r.dispatch)({ describeBlock: e2, name: "run_describe_finish" });
-                        return;
-                    }
-                }
-
                 (0, r.dispatch)({ describeBlock: e2, name: "run_describe_start" });
+
+                if (!isRoot && (isRunAborted() || !subtreeHasTestsToRun(e2))) {
+                    reportNotRun(e2);
+                    (0, r.dispatch)({ describeBlock: e2, name: "run_describe_finish" });
+                    return;
+                }
+
                 const hooks = (0, o.getAllHooksForDescribe)(e2);
 
                 // Helper: call a hook and return a Promise
@@ -8313,20 +8257,17 @@ ${d}` : "") + h.replace(/AssertionError(.*)/g, "");
                         try {
                             yield callHook(h);
                         } catch (err) {
-                            // Mark all tests in this describe as failed
+                            // The selected tests of this describe fail; nested describes are skipped
                             for (const t3 of e2.tests) {
-                                (0, r.dispatch)({ error: err, test: t3, name: "test_failure" });
+                                (0, r.dispatch)({ error: err, test: t3, name: shouldRunTest(t3) ? "test_failure" : "test_skip" });
                             }
-                            // Recursively mark child describe blocks as skipped
-                            function markChildrenSkipped(block) {
-                                for (const child of block.children) {
-                                    for (const t of child.tests) {
-                                        (0, r.dispatch)({ name: "test_skip", test: t });
-                                    }
-                                    markChildrenSkipped(child);
-                                }
+                            for (const ch of e2.children) {
+                                for (const t of ch.tests) (0, r.dispatch)({ name: "test_skip", test: t });
+                                ch.children.forEach(function skipAll(b) {
+                                    b.tests.forEach(t => (0, r.dispatch)({ name: "test_skip", test: t }));
+                                    b.children.forEach(skipAll);
+                                });
                             }
-                            markChildrenSkipped(e2);
 
                             // Finish this describe block and stop execution
                             (0, r.dispatch)({ describeBlock: e2, name: "run_describe_finish" });
@@ -8365,25 +8306,15 @@ ${d}` : "") + h.replace(/AssertionError(.*)/g, "");
 
             //:dma
 
-
-
             var s;
             const f = (l = i(function* (e2) {
                 const t2 = Object.create(null);
 
                 //dma:
-                const testNameFilter = globalThis.__JESTLITE_TEST_NAME_FILTER__;
-                if (testNameFilter) {
-                    const testName = (e2.testName || e2.name || "");
-                    const testMatches = typeof testName === "string" && testName.indexOf(testNameFilter) !== -1;
-                    const inMatchedDescribe = isInMatchedDescribe(e2, testNameFilter);
-                    if (!testMatches && !inMatchedDescribe) {
-                        return void (0, r.dispatch)({ name: "test_skip", test: e2 });
-                    }
-                } else {
-                    if (e2.mode === "skip" || (0, r.getState)().hasFocusedTests && e2.mode !== "only")
-                        return void (0, r.dispatch)({ name: "test_skip", test: e2 });
-                }
+                if (!shouldRunTest(e2))
+                    return void (0, r.dispatch)({ name: "test_skip", test: e2 });
+                if (isRunAborted())
+                    return void (0, r.dispatch)({ name: "test_cancel", test: e2 });
                 //:dma
                 var n2 = (0, o.getEachHooksForTest)(e2);
                 const i2 = n2.afterEach, a2 = n2.beforeEach;

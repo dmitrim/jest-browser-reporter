@@ -1,28 +1,65 @@
 {
   "name": "jest-browser-reporter",
-  "version": "1.0.3",
-  "description": "A beautiful browser-based test results reporter for Jest Lite",
+  "version": "2.0.0",
+  "description": "Run Jest-style tests in the browser and see the results live on the page: filters, search, re-run failed tests, stop, CI mode.",
   "author": "Dmitriy Marfin",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dmitrim/jest-browser-reporter.git"
+  },
+  "homepage": "https://github.com/dmitrim/jest-browser-reporter#readme",
+  "bugs": {
+    "url": "https://github.com/dmitrim/jest-browser-reporter/issues"
+  },
   "main": "cjs/index.js",
   "module": "esm/index.js",
   "browser": "umd/index.js",
+  "unpkg": "umd/index.js",
+  "jsdelivr": "umd/index.js",
   "types": "types/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "globals": ["types/globals.d.ts"]
+    }
+  },
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "import": "./esm/index.js",
+      "require": "./cjs/index.js",
+      "default": "./esm/index.js"
+    },
+    "./globals": {
+      "types": "./types/globals.d.ts",
+      "import": "./globals/index.js",
+      "require": "./globals/index.cjs",
+      "default": "./globals/index.js"
+    },
+    "./umd": "./umd/index.js",
+    "./package.json": "./package.json"
+  },
   "files": [
     "cjs",
     "esm",
     "umd",
+    "globals",
     "types",
-    "README.md"
+    "docs",
+    "examples",
+    "CHANGELOG.md"
   ],
   "private": false,
   "dependencies": {},
   "keywords": [
     "jest",
-    "reporter",
+    "jest-lite",
     "browser",
     "test",
+    "testing",
+    "test-runner",
+    "reporter",
     "results",
-    "jest-lite"
+    "in-browser"
   ]
 }
