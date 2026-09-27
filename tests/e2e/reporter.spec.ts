@@ -136,6 +136,27 @@ test('sorting by column, formatted durations with the previous time, and a run e
     expect(await ids()).toEqual(['Math › adds', 'Math › fails', 'Math › skipped', 'Slow › step 1', 'Slow › step 2', 'Slow › step 3', 'Slow › step 4', 'Slow › step 5']);
 });
 
+test('a suite header runs its tests; "a | b" in the search matches either', async ({ page }) => {
+    await openReporter(page);
+    await page.click('.group-toggle-btn');
+    await expect(page.locator('tr.group-header[data-group="Slow"] .run-group-btn')).toHaveAttribute('title', /Run the 5 tests this suite shows/);
+
+    await page.click('tr.group-header[data-group="Slow"] .run-group-btn');
+    await waitForRunEnd(page);
+    let summary = await page.evaluate(() => (window as any).__JEST_BROWSER_RESULTS__);
+    expect(summary.counts).toEqual({ total: 5, pass: 5, fail: 0, skip: 0, cancel: 0 });
+    await expect(page.locator('tr.group-header[data-group="Slow"]')).toHaveAttribute('data-collapsed', 'false');
+
+    await page.fill('.search-input', 'adds | step 3');
+    await expect(page.locator('.run-filtered-btn')).toHaveText(/Run Filtered \(2\)/);
+    await page.click('.run-filtered-btn');
+    await waitForRunEnd(page);
+    summary = await page.evaluate(() => (window as any).__JEST_BROWSER_RESULTS__);
+    expect(summary.results.filter((r: any) => !r.filteredOut).map((r: any) => r.fullName)).toEqual(['Math › adds', 'Slow › step 3']);
+    await page.fill('.search-input', '');
+    await page.click('.group-toggle-btn');
+});
+
 test('a skipped test runs when started from its row', async ({ page }) => {
     await openReporter(page);
     await page.click('.run-all-btn');

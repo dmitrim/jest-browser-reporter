@@ -310,6 +310,14 @@
 .jest-browser-reporter .group-header { background: var(--jbr-header); font-weight: 700; cursor: pointer; user-select: none; }
 .jest-browser-reporter .group-header:hover { filter: brightness(0.97); }
 .jest-browser-reporter .group-icon { display: inline-block; width: 1.2em; color: var(--jbr-text-muted); }
+.jest-browser-reporter .group-header-content { display: flex; align-items: center; gap: 4px; }
+.jest-browser-reporter .group-header-content .group-meta { flex: 1; }
+.jest-browser-reporter .run-group-btn {
+    padding: 2px 12px; border: 1px solid var(--jbr-border-strong); background: var(--jbr-surface); border-radius: 6px;
+    cursor: pointer; font-size: 13px; font-weight: 500; color: var(--jbr-text-muted); font-style: normal;
+}
+.jest-browser-reporter .run-group-btn:not(:disabled):hover { background: var(--jbr-accent); color: #fff; border-color: var(--jbr-accent); }
+.jest-browser-reporter.is-running .run-group-btn { opacity: 0.4; pointer-events: none; }
 .jest-browser-reporter .group-meta { color: var(--jbr-text-muted); font-weight: 500; font-size: 13px; margin-left: 8px; font-style: italic; }
 
 /* Error and source panels */

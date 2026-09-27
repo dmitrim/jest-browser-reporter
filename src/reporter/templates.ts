@@ -27,6 +27,9 @@ const STATUS_BADGES: Record<TestStatus | 'pending', { icon: string; text: string
     pending: { icon: '·', text: 'NOT RUN' },
 };
 
+export const RUN_FILTERED_TIP = 'Run the tests the table shows: the search and the status filter apply — use | in the search '
+    + 'for alternatives, e.g. &quot;Signature | Licensing&quot;. Skipped (.skip) tests are left out. Ctrl+Shift+Enter';
+
 const FILTERS: Array<{ value: StatusFilter; label: string }> = [
     { value: 'all', label: 'All' },
     { value: 'pass', label: 'Passed' },
@@ -60,18 +63,18 @@ export function renderLayout(state: LayoutState): string {
                 <div class="summary-stats">${renderStats({ total: 0, pass: 0, fail: 0, skip: 0, cancel: 0 })}</div>
                 <div class="run-controls">
                     <button class="run-all-btn" type="button" title="Run all tests (Ctrl+Enter)">${LABELS.runAll}</button>
-                    <button class="run-filtered-btn" type="button" title="Run the tests shown by the search and status filter (Ctrl+Shift+Enter)" disabled>${LABELS.runFiltered(0)}</button>
-                    <button class="run-failed-btn" type="button" title="Run the tests that failed last time" disabled>${LABELS.runFailed(0)}</button>
+                    <button class="run-filtered-btn" type="button" title="${RUN_FILTERED_TIP}" disabled>${LABELS.runFiltered(0)}</button>
+                    <button class="run-failed-btn" type="button" title="Run only the tests that failed last time; they are remembered across reloads" disabled>${LABELS.runFailed(0)}</button>
                     <button class="export-btn" type="button" title="Download the results as JSON" disabled>${LABELS.export}</button>
                 </div>
             </div>
             <div class="filter-controls">
                 <div class="search-container">
-                    <input type="search" class="search-input" placeholder="Search tests… (Ctrl+F)" value="${escapeHtml(state.search)}" />
+                    <input type="search" class="search-input" placeholder="Search tests… (a | b matches either)" title="Filters by test and suite name. Separate alternatives with | to match any of them, e.g. &quot;Signature | Licensing&quot;. Ctrl+F focuses the search, Esc clears it." value="${escapeHtml(state.search)}" />
                     <button class="search-clear ${state.search ? '' : 'hidden'}" type="button" title="Clear search">×</button>
                 </div>
-                ${FILTERS.map(f => `<button class="filter-btn ${state.filter === f.value ? 'active' : ''}" type="button" data-filter="${f.value}">${f.label}</button>`).join('')}
-                <button class="group-toggle-btn ${state.groupBySuite ? 'active' : ''}" type="button">Group by Suite</button>
+                ${FILTERS.map(f => `<button class="filter-btn ${state.filter === f.value ? 'active' : ''}" type="button" data-filter="${f.value}" title="${f.value === 'all' ? 'Show all tests' : `Show only ${f.label.toLowerCase()} tests`}">${f.label}</button>`).join('')}
+                <button class="group-toggle-btn ${state.groupBySuite ? 'active' : ''}" type="button" title="Group the tests by their top-level describe. Each group can be collapsed, and has a &quot;▶ Run&quot; button for its tests.">Group by Suite</button>
             </div>
             <table class="test-table">
                 <thead>
@@ -88,7 +91,7 @@ export function renderLayout(state: LayoutState): string {
 }
 
 function sortableHeader(column: SortColumn, label: string, cls: string): string {
-    return `<th class="${cls} sortable" data-sort="${column}" aria-sort="none" title="Sort by ${label.toLowerCase()}">`
+    return `<th class="${cls} sortable" data-sort="${column}" aria-sort="none" title="Sort by ${label.toLowerCase()}: click again for descending order, a third time for the original order">`
         + `${label}<span class="sort-indicator"></span></th>`;
 }
 
@@ -145,14 +148,24 @@ export function formatGroupMeta(counts: StatusCounts): string {
 
 export function renderGroupHeader(groupKey: string, collapsed: boolean): string {
     return `
-        <tr class="group-header" data-group="${escapeHtml(groupKey)}" data-collapsed="${collapsed}">
+        <tr class="group-header" data-group="${escapeHtml(groupKey)}" data-collapsed="${collapsed}" title="Click to collapse or expand this suite">
             <td colspan="3">
-                <span class="group-icon">${collapsed ? LABELS.groupCollapsed : LABELS.groupExpanded}</span>
-                <span class="group-title">${escapeHtml(groupKey)}</span>
-                <span class="group-meta"></span>
+                <div class="group-header-content">
+                    <span class="group-icon">${collapsed ? LABELS.groupCollapsed : LABELS.groupExpanded}</span>
+                    <span class="group-title">${escapeHtml(groupKey)}</span>
+                    <span class="group-meta"></span>
+                    <button class="run-group-btn" type="button">${LABELS.runTest}</button>
+                </div>
             </td>
         </tr>
     `;
+}
+
+/** Tooltip of a suite's "▶ Run": how many tests it runs, and which. */
+export function groupRunTitle(runnableCount: number): string {
+    return runnableCount
+        ? `Run the ${runnableCount} tests this suite shows. The search and the status filter apply; skipped (.skip) tests are left out.`
+        : 'Nothing to run: the tests this suite shows are all skipped (.skip). To run one anyway, use "▶ Run" in its row.';
 }
 
 /**
@@ -189,7 +202,7 @@ export function renderTestRow(test: TestResult, groupKey: string, stale: boolean
             <span class="duration">${duration}</span>
             ${renderPreviousDuration(test)}
             <button class="run-btn" type="button" title="${runnable
-                ? 'Run this test only'
+                ? 'Run this test only, even if the search or status filter hides it'
                 : 'Skipped with .skip: click to run it anyway'}">${LABELS.runTest}</button>
         </div>
     </td>

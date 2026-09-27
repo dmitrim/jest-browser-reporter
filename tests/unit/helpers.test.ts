@@ -45,6 +45,17 @@ describe('createTestPredicate', () => {
     });
 });
 
+describe('search alternatives', () => {
+    it('splits on | and ignores case and empty parts', async () => {
+        const { parseSearch, matchesSearch } = await import('../../src/reporter/search');
+        expect(parseSearch(' Signature |licensing| ')).toEqual(['signature', 'licensing']);
+        expect(parseSearch('')).toEqual([]);
+        expect(matchesSearch('GenerateAndCompare › DoSignatureTest33', parseSearch('signature | licensing'))).toBe(true);
+        expect(matchesSearch('Bitmap › Blur', parseSearch('signature | licensing'))).toBe(false);
+        expect(matchesSearch('anything', [])).toBe(true);
+    });
+});
+
 describe('formatEachTitle', () => {
     it('fills printf placeholders', () => {
         expect(formatEachTitle('%s|%d|%i|%f|%j|%#|%%', ['a', 2.7, 3.9, 1.5, { x: 1 }], 4))

@@ -11,8 +11,9 @@ import { ResultsTable } from './ResultsTable';
 import { RunningIndicator } from './RunningIndicator';
 import { nextSort, type SortColumn, type SortState } from './sorting';
 import { DurationStore, RunRecordStore, SettingsStore } from './storage';
-import { LABELS, renderLayout, renderNotice, renderNoticeDetails, renderStats, type RunTiming } from './templates';
-import { countStatuses, normalizeResult, toSerializable } from './testResults';
+import { LABELS, RUN_FILTERED_TIP, renderLayout, renderNotice, renderNoticeDetails, renderStats, type RunTiming } from './templates';
+import { countStatuses, getGroupKey, normalizeResult, toSerializable } from './testResults';
+import { matchesSearch, parseSearch } from './search';
 import './styles.css';
 
 /** Name of the `window` property that receives the {@link RunSummary} (without source code) after each run. */
@@ -78,7 +79,8 @@ export class JestBrowserReporter {
     };
 
     private filter: StatusFilter;
-    private search: string;
+    /** Search alternatives: "a | b" matches either. */
+    private searchTerms: string[];
     private groupBySuite: boolean;
     private readonly collapsedGroups: Set<string>;
     private savedFailedTests: string[];
@@ -121,6 +123,7 @@ export class JestBrowserReporter {
         ['.run-all-btn', () => this.activeRun ? this.stop() : this.runFromUi()],
         ['.run-failed-btn', () => this.runFromUi({ onlyFailed: true })],
         ['.run-filtered-btn', () => this.runFromUi({ tests: this.filteredTests() })],
+        ['.run-group-btn', el => this.runFromUi({ tests: this.groupTests(el.closest<HTMLElement>('.group-header')?.dataset.group ?? '') })],
         ['.export-btn', () => this.exportResults()],
         ['.filter-btn', el => this.setFilter((el.dataset.filter as StatusFilter) || 'all')],
         ['.group-toggle-btn', () => this.toggleGrouping()],
@@ -147,7 +150,7 @@ export class JestBrowserReporter {
 
         const saved = this.settings.load();
         this.filter = saved.filter ?? 'all';
-        this.search = normalizeSearch(saved.search ?? '');
+        this.searchTerms = parseSearch(saved.search ?? '');
         this.groupBySuite = saved.groupBySuite ?? !!options.groupBySuite;
         this.collapsedGroups = new Set(saved.collapsedGroups);
         this.savedFailedTests = saved.failedTests ?? [];
@@ -486,11 +489,11 @@ export class JestBrowserReporter {
     private planAutoRun(mode: 'filtered' | 'all', grep?: string): { options: RunOptions; label: string | null } | null {
         if (grep) return { options: { filter: grep }, label: `?grep="${grep}"` };
         const failedOnly = this.filter === 'fail';
-        if (mode === 'all' || (!this.search && !failedOnly)) return { options: {}, label: null };
+        if (mode === 'all' || (!this.searchTerms.length && !failedOnly)) return { options: {}, label: null };
 
         // Results are not saved, so the other status filters cannot be applied before a run
         let tests = getRegisteredTests().filter(t => t.runnable).map(t => t.fullName);
-        if (this.search) tests = tests.filter(name => name.toLowerCase().includes(this.search));
+        if (this.searchTerms.length) tests = tests.filter(name => matchesSearch(name, this.searchTerms));
         if (failedOnly) {
             const failed = new Set(this.failedTests);
             tests = tests.filter(name => failed.has(name));
@@ -498,7 +501,7 @@ export class JestBrowserReporter {
         if (!tests.length) return null;
 
         const parts = [
-            this.search ? `the search "${this.elements.search.value.trim()}"` : '',
+            this.searchTerms.length ? `the search "${this.elements.search.value.trim()}"` : '',
             failedOnly ? 'the tests that failed last time' : '',
         ].filter(Boolean);
         return { options: { tests }, label: parts.join(' and ') };
@@ -638,7 +641,7 @@ export class JestBrowserReporter {
     }
 
     private applyFilter(): void {
-        this.table.applyFilter({ status: this.filter, search: this.search });
+        this.table.applyFilter({ status: this.filter, search: this.searchTerms });
     }
 
     private updateButtons(): void {
@@ -647,14 +650,14 @@ export class JestBrowserReporter {
         this.elements.runFailed.textContent = LABELS.runFailed(failedCount);
         this.elements.runFailed.disabled = running || failedCount === 0;
         // Without a search or status filter, "Run Filtered" would be "Run All"
-        const filterActive = !!this.search || this.filter !== 'all';
+        const filterActive = this.searchTerms.length > 0 || this.filter !== 'all';
         const matching = filterActive ? this.filteredTests(true) : [];
         const runnableCount = matching.filter(name => !this.skippedTests().has(name)).length;
         this.elements.runFiltered.textContent = LABELS.runFiltered(runnableCount);
         this.elements.runFiltered.disabled = running || runnableCount === 0;
         this.elements.runFiltered.title = matching.length && !runnableCount
             ? 'The tests shown are all skipped (.skip). To run one anyway, use "▶ Run" in its row.'
-            : 'Run the tests shown by the search and status filter (Ctrl+Shift+Enter)';
+            : RUN_FILTERED_TIP.replace(/&quot;/g, '"');
         this.elements.export.disabled = running || this.realResults().length === 0;
     }
 
@@ -693,6 +696,14 @@ export class JestBrowserReporter {
         this.refreshSummary();
     }
 
+    /** The tests a suite's "▶ Run" runs: what the suite shows, without `.skip` tests. */
+    private groupTests(groupKey: string): string[] {
+        return this.filteredTests().filter(name => {
+            const result = this.shown.get(name);
+            return !!result && getGroupKey(result) === groupKey;
+        });
+    }
+
     /** Full names of the registered tests that never run (`.skip`, no body). */
     private skippedTests(): Set<string> {
         return new Set(getRegisteredTests().filter(t => !t.runnable).map(t => t.fullName));
@@ -710,15 +721,15 @@ export class JestBrowserReporter {
     }
 
     private matchingTests(): string[] {
-        const matchesSearch = (fullName: string) => !this.search || fullName.toLowerCase().includes(this.search);
+        const matchesTerms = (fullName: string) => matchesSearch(fullName, this.searchTerms);
         if (!this.realResults().length) {
             // Nothing run yet: only the search can apply, to the registered tests
             return this.filter === 'all'
-                ? getRegisteredTests().map(t => t.fullName).filter(matchesSearch)
+                ? getRegisteredTests().map(t => t.fullName).filter(matchesTerms)
                 : [];
         }
         return [...this.shown.values()]
-            .filter(r => (this.filter === 'all' || r.status === this.filter) && matchesSearch(r.fullName))
+            .filter(r => (this.filter === 'all' || r.status === this.filter) && matchesTerms(r.fullName))
             .map(r => r.fullName);
     }
 
@@ -772,7 +783,7 @@ export class JestBrowserReporter {
     }
 
     private setSearch(value: string): void {
-        this.search = normalizeSearch(value);
+        this.searchTerms = parseSearch(value);
         this.elements.searchClear.classList.toggle('hidden', !value);
         this.settings.save({ search: value });
         this.applyFilter();
@@ -836,10 +847,6 @@ function resolveContainer(container: HTMLElement | string | undefined): HTMLElem
     const element = document.querySelector<HTMLElement>(container);
     if (!element) throw new Error(`jest-browser-reporter: container "${container}" not found`);
     return element;
-}
-
-function normalizeSearch(value: string): string {
-    return value.trim().toLowerCase();
 }
 
 function rowId(element: HTMLElement): string {

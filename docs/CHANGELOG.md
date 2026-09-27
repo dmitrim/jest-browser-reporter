@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Confirmation before leaving the page during a run (`confirmLeaveWhileRunning`), and a notice on the next load naming the test that was running when the page was left.
 - CI mode: `?autorun` and `?grep=` URL parameters; the summary is published as `window.__JEST_BROWSER_RESULTS__` together with a `jest-browser-reporter:finish` event.
 - **Export JSON** button.
+- **▶ Run** on each suite header when grouped by suite: runs what the suite shows.
+- The search accepts alternatives separated by `|` (`Signature | Licensing`), in the table, **Run Filtered** and the auto-run.
+- Tooltips explain the search syntax, the run buttons, sorting and grouping.
 - An automatic run is not started when the previous run did not finish, so a test that navigates the page away cannot restart runs forever.
 - An automatic run (`autoRun: true`, `?autorun`) runs what the saved search and "Failed" filter select, announced by a notice with a **Run all tests** button; `autoRun: 'all'` always runs everything.
 - Sorting by status, test name or duration by clicking a column header; the sort is remembered.

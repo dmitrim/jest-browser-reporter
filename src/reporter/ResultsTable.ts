@@ -1,12 +1,13 @@
 import type { StatusFilter, TestResult } from '../types';
-import { LABELS, formatGroupMeta, renderEmptyRow, renderGroupHeader, renderTestRow } from './templates';
+import { LABELS, formatGroupMeta, groupRunTitle, renderEmptyRow, renderGroupHeader, renderTestRow } from './templates';
+import { matchesSearch } from './search';
 import { countStatuses, getGroupKey } from './testResults';
 import { createComparator, type SortState } from './sorting';
 
 export interface TableFilter {
     status: StatusFilter;
-    /** Lower-case search text; empty matches everything. */
-    search: string;
+    /** Search alternatives (see `parseSearch`); none match everything. */
+    search: readonly string[];
 }
 
 interface Group {
@@ -113,7 +114,7 @@ export class ResultsTable {
     applyFilter(filter: TableFilter): void {
         const matches = (row: HTMLElement) =>
             (filter.status === 'all' || row.dataset.status === filter.status)
-            && (!filter.search || (row.dataset.search || '').includes(filter.search));
+            && matchesSearch(row.dataset.search || '', filter.search);
 
         if (!this.grouped) {
             this.rows.forEach(row => setVisible(row, matches(row)));
@@ -127,6 +128,11 @@ export class ResultsTable {
             group.header.querySelector('.group-meta')!.textContent =
                 formatGroupMeta(countStatuses(matching.map(row => row.dataset.status)));
             setVisible(group.header, matching.length > 0);
+
+            const runnable = matching.filter(row => this.isRunnable(row.dataset.id || '')).length;
+            const runButton = group.header.querySelector<HTMLButtonElement>('.run-group-btn')!;
+            runButton.disabled = runnable === 0;
+            runButton.title = groupRunTitle(runnable);
         }
     }
 

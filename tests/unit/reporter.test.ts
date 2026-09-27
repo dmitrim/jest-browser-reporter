@@ -430,6 +430,52 @@ describe('auto-run with a saved filter', () => {
     });
 });
 
+describe('search alternatives and suite runs', () => {
+    it('"a | b" in the search matches either, in the table and in Run Filtered', async () => {
+        registerSampleTests();
+        reporter = new lib.JestBrowserReporter({ container: '#root' });
+        const search = $('.search-input') as HTMLInputElement;
+        expect(search.title).toContain('Separate alternatives with |');
+
+        search.value = 'ADDS |  waits | ';
+        search.dispatchEvent(new Event('input'));
+        await vi.waitFor(() => expect(visibleRows().map(r => r.dataset.id)).toEqual(['Math › adds', 'Async › waits']));
+        expect($('.run-filtered-btn').textContent).toContain('(2)');
+
+        const summary = await reporter.runFiltered();
+        expect(summary.results.filter(r => !r.filteredOut).map(r => r.fullName)).toEqual(['Math › adds', 'Async › waits']);
+    });
+
+    it('a suite header runs what the suite shows, and its tooltip says how many', async () => {
+        registerSampleTests();
+        reporter = new lib.JestBrowserReporter({ container: '#root', groupBySuite: true });
+        const mathRun = $('tr.group-header[data-group="Math"] .run-group-btn') as HTMLButtonElement;
+        expect(mathRun.title).toContain('Run the 2 tests this suite shows'); // the .skip one is left out
+
+        const search = $('.search-input') as HTMLInputElement;
+        search.value = 'fails';
+        search.dispatchEvent(new Event('input'));
+        await vi.waitFor(() => expect(mathRun.title).toContain('Run the 1 tests'));
+
+        const done = new Promise<import('../../src/types').RunSummary>(resolve => reporter!.on('runFinish', resolve));
+        mathRun.click();
+        const summary = await done;
+        expect(summary.results.filter(r => !r.filteredOut).map(r => r.fullName)).toEqual(['Math › fails <b>html</b>']);
+        expect($('tr.group-header[data-group="Math"]').dataset.collapsed).toBe('false'); // the click did not toggle the group
+    });
+
+    it("a suite whose shown tests are all .skip cannot be run from its header", async () => {
+        registerSampleTests();
+        reporter = new lib.JestBrowserReporter({ container: '#root', groupBySuite: true });
+        const search = $('.search-input') as HTMLInputElement;
+        search.value = 'skipped';
+        search.dispatchEvent(new Event('input'));
+        const mathRun = $('tr.group-header[data-group="Math"] .run-group-btn') as HTMLButtonElement;
+        await vi.waitFor(() => expect(mathRun.disabled).toBe(true));
+        expect(mathRun.title).toContain('all skipped');
+    });
+});
+
 describe('rows of tests without results', () => {
     it('lists every registered test before the first run: NOT RUN, or SKIP for .skip tests', () => {
         registerSampleTests();

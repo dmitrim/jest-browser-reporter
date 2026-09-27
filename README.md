@@ -12,7 +12,7 @@ without a Node.js DOM emulation.
 ![jest-browser-reporter screenshot](https://raw.githubusercontent.com/dmitrim/jest-browser-reporter/main/docs/screenshot.png)
 
 - **Every test listed** from the start (*not run* until it runs); **live results** with a progress bar and the estimated time left
-- **Stop** a run at any time; **Run Failed** re-runs just the failures; **Run Filtered** runs what the search shows; **▶ Run** on any row runs one test
+- **Stop** a run at any time; **Run Failed** re-runs just the failures; **Run Filtered** runs what the search shows; **▶ Run** on a suite or a row runs just that
 - **Search**, status filters, grouping by suite, **sorting** by status, name or duration — all remembered for the next visit
 - Durations like `850ms`, `1sec 234ms`, `2min 5sec`, with each test's **previous duration** (▲ slower / ▼ faster) and the total run time
 - Error details and the test's **source code**, syntax-highlighted
@@ -70,7 +70,8 @@ order to get wrong. More setups — TypeScript, a plain `<script>` tag, CI — a
 | **Run Filtered (N)** | Runs exactly the tests the table shows for the current search text and status filter; before the first run, the search applies to the registered tests |
 | **▶ Run** on a row | Runs just that test; the other rows keep their previous result, dimmed |
 | **Export JSON** | Downloads the shown results |
-| Search, status filters, **Group by Suite** | Filter the table; the choice is saved in `localStorage` |
+| Search, status filters, **Group by Suite** | Filter the table; the choice is saved in `localStorage`. Separate alternatives with `\|` to match any of them: `Signature \| Licensing` |
+| **▶ Run** on a suite header | Runs what the suite shows (search and status filter apply, `.skip` tests are left out); shown when grouped by suite |
 | Column headers | Sort by status (failures first), test name or duration: ascending → descending → registration order |
 | Duration column | This run's time and, below it, the previous time of the test, with ▲ / ▼ when it changed by over 20% |
 | `Ctrl+Enter` / `Ctrl+Shift+Enter` / `Ctrl+F` / `Esc` | Run all / run filtered / focus search / clear search |
