@@ -32,13 +32,20 @@ interface JestLiteEvent {
 }
 
 export interface TestRunOptions {
-    /** When set, runs exactly the tests it accepts and ignores `.only` / `.skip`. */
+    /** When set, runs the tests it accepts, ignoring `.only`. `.skip` tests run only with `runSkipped`. */
     filter?: (test: TestInfo) => boolean;
+    /** Lets `filter` select `.skip` tests too: for tests the user asked for by name. */
+    runSkipped?: boolean;
     signal?: AbortSignal;
     /** Called before the first test with the tests selected to run. */
     onRunStart?(tests: TestInfo[]): void;
     onTestStart?(test: TestInfo): void;
     onTestDone?(result: TestResult): void;
+}
+
+/** A registered test; `runnable` is false for `.skip` tests and tests without a body. */
+export interface RegisteredTest extends TestInfo {
+    runnable: boolean;
 }
 
 interface ActiveRun {
@@ -101,17 +108,24 @@ export async function runTests(options: TestRunOptions = {}): Promise<{ results:
 }
 
 /** Tests registered so far, in registration order. */
-export function getRegisteredTests(): TestInfo[] {
-    const tests: TestInfo[] = [];
-    if (state) forEachTest(state.rootDescribeBlock, test => tests.push(getTestInfo(test)));
+export function getRegisteredTests(): RegisteredTest[] {
+    const tests: RegisteredTest[] = [];
+    if (state) forEachTest(state.rootDescribeBlock, test => tests.push({ ...getTestInfo(test), runnable: isRunnable(test) }));
     return tests;
+}
+
+/** `.skip` tests and tests without a body never run, whatever the selection. */
+function isRunnable(test: JestLiteTest): boolean {
+    return !!test.fn && test.mode !== 'skip' && !hasSkippedAncestor(test);
 }
 
 function shouldRunTest(test: JestLiteTest, currentState: JestLiteState): boolean {
     if (!test.fn) return false;
-    const filter = activeRun?.options.filter;
-    if (filter) return filter(getTestInfo(test));
-    if (test.mode === 'skip' || hasSkippedAncestor(test)) return false;
+    const options = activeRun?.options;
+    // A pattern (search, auto-run, grep) never selects `.skip` tests, as with Jest's -t: they are often
+    // skipped because they cannot run here (e.g. Node.js-only tests). Tests asked for by name do run.
+    if (!isRunnable(test) && !(options?.filter && options.runSkipped)) return false;
+    if (options?.filter) return options.filter(getTestInfo(test));
     return !currentState.hasFocusedTests || test.mode === 'only';
 }
 

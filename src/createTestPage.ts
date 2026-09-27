@@ -38,7 +38,7 @@ export async function createTestPage(options: TestPageOptions): Promise<JestBrow
 
     const url = urlParams === false ? {} : readUrlParams();
     if (autoRun || url.autorun) {
-        reporter.run({ filter: url.grep }).catch(error => console.error('jest-browser-reporter: test execution failed', error));
+        reporter.startAutoRun(autoRun === 'all' ? 'all' : 'filtered', url.grep);
     } else {
         reporter.refreshIdleState();
     }

@@ -67,15 +67,38 @@ describe('runTests', () => {
         g.describe('S', () => {
             g.it('DoTest3', () => { });
             g.it('DoTest30', () => { });
-            g.it.skip('skipped but selected', () => { });
+            g.it.only('focused', () => { });
         });
 
-        const selected = new Set(['S › DoTest3', 'S › skipped but selected']);
+        const selected = new Set(['S › DoTest3']);
         const { results } = await runner.runTests({ filter: t => selected.has(t.fullName) });
 
-        expect(statuses(results)).toEqual({ 'S › DoTest3': 'pass', 'S › DoTest30': 'skip', 'S › skipped but selected': 'pass' });
+        expect(statuses(results)).toEqual({ 'S › DoTest3': 'pass', 'S › DoTest30': 'skip', 'S › focused': 'skip' });
         expect(results.find(r => r.name === 'DoTest30')!.filteredOut).toBe(true);
         expect(results.find(r => r.name === 'DoTest3')!.filteredOut).toBe(false);
+    });
+
+    it('runs .skip tests selected by name when runSkipped is set', async () => {
+        const body = vi.fn();
+        g.it.skip('skipped test', body);
+        g.it('other', () => { });
+
+        const { results } = await runner.runTests({ filter: t => t.name === 'skipped test', runSkipped: true });
+
+        expect(body).toHaveBeenCalledTimes(1);
+        expect(statuses(results)).toEqual({ 'skipped test': 'pass', other: 'skip' });
+    });
+
+    it('never runs .skip tests selected by a pattern', async () => {
+        const body = vi.fn();
+        g.it.skip('skipped test', body);
+        g.describe.skip('Skipped describe', () => g.it('inner', body));
+
+        const { results } = await runner.runTests({ filter: () => true });
+
+        expect(body).not.toHaveBeenCalled();
+        expect(statuses(results)).toEqual({ 'skipped test': 'skip', 'Skipped describe › inner': 'skip' });
+        expect(results.every(r => !r.filteredOut)).toBe(true);
     });
 
     it('does not run hooks of a describe with no selected tests', async () => {
@@ -154,7 +177,11 @@ describe('runTests', () => {
 
     it('lists registered tests', () => {
         g.describe('S', () => g.it('t', () => { }));
-        expect(runner.getRegisteredTests()).toEqual([{ name: 't', suitePath: ['S'], fullName: 'S › t' }]);
+        g.it.skip('skipped', () => { });
+        expect(runner.getRegisteredTests()).toEqual([
+            { name: 'skipped', suitePath: [], fullName: 'skipped', runnable: false },
+            { name: 't', suitePath: ['S'], fullName: 'S › t', runnable: true },
+        ]);
     });
 });
 

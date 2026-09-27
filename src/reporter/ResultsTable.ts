@@ -24,6 +24,7 @@ export class ResultsTable {
         private readonly tbody: HTMLElement,
         private grouped: boolean,
         private readonly collapsedGroups: Set<string>,
+        private readonly isRunnable: (fullName: string) => boolean = () => true,
     ) { }
 
     clear(emptyMessage: string): void {
@@ -43,7 +44,7 @@ export class ResultsTable {
     /** Adds the row of a test, or replaces it if the test already has one. */
     upsert(result: TestResult, stale: boolean): void {
         const groupKey = this.grouped ? getGroupKey(result) : '';
-        const row = createRow(renderTestRow(result, groupKey, stale));
+        const row = createRow(renderTestRow(result, groupKey, stale, this.isRunnable(result.fullName)));
         const existing = this.rows.get(result.fullName);
 
         if (existing) {

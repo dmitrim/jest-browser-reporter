@@ -1,16 +1,17 @@
 import type {
-    JestBrowserReporterOptions, ReporterEventMap, RunOptions, RunSummary, StatusFilter, TestResult, TestStatus
+    BlockedNavigation, JestBrowserReporterOptions, ReporterEventMap, RunOptions, RunSummary, StatusFilter, TestResult, TestStatus
 } from '../types';
 import { getRegisteredTests, runTests, TEST_TIMEOUT_KEY } from '../runner/runner';
 import { createTestPredicate } from '../runner/testFilter';
 import { formatErrorsHtml, formatSourceCodeHtml } from '../utils/SourceCodeFormat';
 import { debounce, queryRequired } from '../utils/dom';
 import { formatDuration } from '../utils/format';
+import { guardNavigation } from './navigationGuard';
 import { ResultsTable } from './ResultsTable';
 import { RunningIndicator } from './RunningIndicator';
 import { nextSort, type SortColumn, type SortState } from './sorting';
 import { DurationStore, RunRecordStore, SettingsStore } from './storage';
-import { LABELS, renderLayout, renderStats, type RunTiming } from './templates';
+import { LABELS, renderLayout, renderNotice, renderNoticeDetails, renderStats, type RunTiming } from './templates';
 import { countStatuses, normalizeResult, toSerializable } from './testResults';
 import './styles.css';
 
@@ -37,6 +38,11 @@ interface ActiveRun {
     estimateScale: number;
     /** Remembered duration of each test before this run. */
     previous: Map<string, number | null>;
+    currentTest: string | null;
+    blockedNavigations: BlockedNavigation[];
+    releaseNavigation: () => void;
+    /** One notice per run lists all blocked navigations. */
+    navigationNotice: HTMLElement | null;
 }
 
 /**
@@ -68,7 +74,7 @@ export class JestBrowserReporter {
         runFailed: HTMLButtonElement;
         runFiltered: HTMLButtonElement;
         export: HTMLButtonElement;
-        notice: HTMLElement;
+        notices: HTMLElement;
     };
 
     private filter: StatusFilter;
@@ -79,9 +85,24 @@ export class JestBrowserReporter {
     private sort: SortState | null;
     /** Duration of the last finished run, shown in the summary. */
     private timing: RunTiming | null = null;
+    /** Describes the limit of the next run (set by an auto-run), e.g. `search "sign"`. */
+    private nextRunLabel: string | null = null;
+    /** The notice about a limited auto-run; removed when another run starts. */
+    private autoRunNotice: HTMLElement | null = null;
+    private runPromise: Promise<RunSummary> | null = null;
+    /** Actions of the notice buttons. */
+    private readonly noticeActions = new WeakMap<HTMLElement, () => void>();
+    /** The previous run did not finish, so an auto-run now could repeat whatever ended it. */
+    private previousRunInterrupted = false;
 
     /** Shown results by full name, in registration order; merged across filtered runs. */
     private readonly shown = new Map<string, TestResult>();
+    /**
+     * Rows of registered tests without a result yet ("NOT RUN", or SKIP for `.skip` tests), so the
+     * table always lists every test. They are not results: `results`, the export and the failed
+     * tests ignore them.
+     */
+    private readonly placeholders = new WeakSet<TestResult>();
     /** Shown results that the last run did not run because its filter excluded them. */
     private readonly stale = new Set<string>();
     private activeRun: ActiveRun | null = null;
@@ -104,7 +125,8 @@ export class JestBrowserReporter {
         ['.filter-btn', el => this.setFilter((el.dataset.filter as StatusFilter) || 'all')],
         ['.group-toggle-btn', () => this.toggleGrouping()],
         ['.search-clear', () => this.clearSearch()],
-        ['.notice-close', () => this.hideNotice()],
+        ['.notice-action', el => { this.noticeActions.get(el.closest<HTMLElement>('.reporter-notice')!)?.(); }],
+        ['.notice-close', el => el.closest('.reporter-notice')?.remove()],
         ['.toggle-error', el => this.togglePanel(el, 'error')],
         ['.toggle-source', el => this.togglePanel(el, 'source')],
         ['.group-header', el => this.toggleGroup(el.dataset.group || '')],
@@ -153,9 +175,10 @@ export class JestBrowserReporter {
             runFailed: queryRequired<HTMLButtonElement>(this.root, '.run-failed-btn'),
             runFiltered: queryRequired<HTMLButtonElement>(this.root, '.run-filtered-btn'),
             export: queryRequired<HTMLButtonElement>(this.root, '.export-btn'),
-            notice: queryRequired(this.root, '.reporter-notice'),
+            notices: queryRequired(this.root, '.reporter-notices'),
         };
-        this.table = new ResultsTable(queryRequired(this.root, '#test-results-body'), this.groupBySuite, this.collapsedGroups);
+        this.table = new ResultsTable(queryRequired(this.root, '#test-results-body'), this.groupBySuite, this.collapsedGroups,
+            fullName => !this.skippedTests().has(fullName));
         this.table.clear(EMPTY_MESSAGE);
         this.indicator = new RunningIndicator(queryRequired(this.root, '.running-indicator'));
         this.updateSortHeaders();
@@ -169,6 +192,7 @@ export class JestBrowserReporter {
         document.addEventListener('keydown', this.onKeydown);
 
         const interrupted = this.runRecords.takeInterrupted();
+        this.previousRunInterrupted = !!interrupted;
         if (interrupted) {
             const where = interrupted.currentTest ? ` while "${interrupted.currentTest}" was running` : '';
             this.showNotice(`The previous run did not finish: the page was reloaded or left${where} `
@@ -178,7 +202,7 @@ export class JestBrowserReporter {
         this.updateButtons();
         const url = options.urlParams === false ? {} : readUrlParams();
         if (options.autoRun || url.autorun) {
-            setTimeout(() => this.runFromUi({ filter: url.grep }), 0);
+            setTimeout(() => this.startAutoRun(options.autoRun === 'all' ? 'all' : 'filtered', url.grep), 0);
         } else {
             this.refreshIdleState();
         }
@@ -186,7 +210,7 @@ export class JestBrowserReporter {
 
     /** Results currently shown: the latest result of every test, across filtered runs. */
     get results(): readonly TestResult[] {
-        return [...this.shown.values()];
+        return this.realResults();
     }
 
     /** Summary of the last finished run, or `null` before the first one. */
@@ -201,8 +225,9 @@ export class JestBrowserReporter {
 
     /** Full names of the tests that failed last time; remembered across visits when settings persist. */
     get failedTests(): string[] {
-        if (!this.shown.size) return [...this.savedFailedTests];
-        return [...this.shown.values()].filter(r => r.status === 'fail').map(r => r.fullName);
+        const results = this.realResults();
+        if (!results.length) return [...this.savedFailedTests];
+        return results.filter(r => r.status === 'fail').map(r => r.fullName);
     }
 
     /**
@@ -223,7 +248,11 @@ export class JestBrowserReporter {
         const run: ActiveRun = {
             controller: new AbortController(), testCount: 0, done: 0, pending: [], frame: 0,
             remaining: new Set(), estimateScale: 1, previous: new Map(),
+            currentTest: null, blockedNavigations: [], releaseNavigation: () => undefined, navigationNotice: null,
         };
+        if (this.options.blockNavigation !== false) {
+            run.releaseNavigation = guardNavigation(url => this.onNavigationBlocked(run, url));
+        }
         const external = options.signal;
         const abort = () => this.stop();
         if (external?.aborted) run.controller.abort();
@@ -234,22 +263,31 @@ export class JestBrowserReporter {
         if (!filter) {
             this.shown.clear();
             this.stale.clear();
-            this.table.clear('Waiting for results…');
         }
-        this.hideNotice();
+        this.syncWithRegistry(); // every test gets a row now; results replace them as they arrive
+        const label = this.nextRunLabel;
+        this.nextRunLabel = null;
+        if (!label) {
+            this.autoRunNotice?.remove();
+            this.autoRunNotice = null;
+        }
         this.timing = null;
         this.setRunningUi(true);
-        const message = filter ? 'Running selected tests' : 'Running all tests';
+        let message = filter ? 'Running selected tests' : 'Running all tests';
         this.indicator.showRunning(message);
 
         const startedAt = Date.now();
         try {
             const { results, aborted } = await runTests({
                 filter,
+                // Tests named explicitly (a row's "▶ Run", run({ tests })) run even if they are .skip
+                runSkipped: !!options.tests,
                 signal: run.controller.signal,
                 onRunStart: tests => {
                     run.testCount = tests.length;
                     run.remaining = new Set(tests.map(t => t.fullName));
+                    if (label) message = `Filtered run: ${tests.length} of ${getRegisteredTests().length} tests (${label})`;
+                    this.indicator.setMessage(message);
                     // A full run is best predicted by the last full run; otherwise sum the tests
                     const testsMs = this.durations.estimate(run.remaining);
                     const lastFullRunMs = this.durations.lastFullRunMs;
@@ -263,6 +301,7 @@ export class JestBrowserReporter {
                     this.emit('runStart', { testCount: run.testCount, estimatedMs });
                 },
                 onTestStart: test => {
+                    run.currentTest = test.fullName;
                     this.indicator.setStatus(test.fullName);
                     this.runRecords.update({ testCount: run.testCount, done: run.done, currentTest: test.fullName });
                     this.emit('testStart', test);
@@ -278,6 +317,7 @@ export class JestBrowserReporter {
                     if (result.status === 'pass' || result.status === 'fail') {
                         run.done++;
                         this.indicator.setProgress(run.done, run.testCount);
+                        this.updateEstimate(run);
                     }
                     run.pending.push(result);
                     run.frame ||= requestAnimationFrame(() => this.flushPending(run));
@@ -293,14 +333,16 @@ export class JestBrowserReporter {
                 startedAt,
                 durationMs: Date.now() - startedAt,
                 aborted,
+                blockedNavigations: run.blockedNavigations,
             };
             this.summary = summary;
-            this.finishRun(summary, !filter);
+            this.finishRun(summary, !filter, run.testCount);
             return summary;
         } catch (error) {
             this.indicator.showError('Test execution failed: ' + (error instanceof Error ? error.message : String(error)));
             throw error;
         } finally {
+            run.releaseNavigation();
             cancelAnimationFrame(run.frame);
             external?.removeEventListener('abort', abort);
             this.activeRun = null;
@@ -371,8 +413,9 @@ export class JestBrowserReporter {
      * @internal
      */
     refreshIdleState(): void {
-        this.updateButtons(); // the registered tests may have changed
-        if (this.activeRun || this.shown.size) return;
+        if (!this.activeRun) this.syncWithRegistry(); // the registered tests may have changed
+        this.updateButtons();
+        if (this.activeRun || this.realResults().length) return;
         const count = getRegisteredTests().length;
         const lastRun = this.durations.lastFullRunMs;
         this.indicator.showIdle(count
@@ -382,12 +425,42 @@ export class JestBrowserReporter {
     }
 
     /**
-     * Shows a dismissible warning above the results.
+     * Shows a dismissible warning above the results, optionally with an action button.
      * @internal
      */
-    showNotice(message: string): void {
-        this.elements.notice.querySelector('.notice-text')!.textContent = message;
-        this.elements.notice.classList.remove('hidden');
+    showNotice(message: string, action?: { label: string; run: () => void }): HTMLElement {
+        this.elements.notices.insertAdjacentHTML('beforeend', renderNotice(message, action?.label));
+        const notice = this.elements.notices.lastElementChild as HTMLElement;
+        if (action) this.noticeActions.set(notice, action.run);
+        return notice;
+    }
+
+    /**
+     * Starts the automatic run of `autoRun` / `?autorun`. In `filtered` mode it runs what the saved
+     * search and status filter select, and announces the limit; `grep` replaces the saved filter.
+     * @internal
+     */
+    startAutoRun(mode: 'filtered' | 'all', grep?: string): void {
+        this.syncWithRegistry();
+        if (this.previousRunInterrupted) {
+            // A test that navigates the page away would otherwise restart the run on every load, forever
+            this.previousRunInterrupted = false;
+            this.indicator.showIdle('The automatic run was not started because the previous run did not finish '
+                + '(see the notice above). Press "Run All" to run the tests.');
+            return;
+        }
+        const plan = this.planAutoRun(mode, grep);
+        if (!plan) {
+            this.indicator.showIdle('Nothing was run: no test that can run matches the saved filter (skipped tests '
+                + 'never run). Change the search or status filter, or press "Run All".');
+            return;
+        }
+        if (plan.label) {
+            this.autoRunNotice = this.showNotice(`This automatic run is limited to ${plan.label}.`,
+                { label: 'Run all tests', run: () => this.runAllNow() });
+        }
+        this.nextRunLabel = plan.label;
+        this.runFromUi(plan.options);
     }
 
     // #region Running
@@ -395,7 +468,40 @@ export class JestBrowserReporter {
     /** Starts a run from a UI action; errors are already shown by run(). */
     private runFromUi(options?: RunOptions): void {
         if (this.activeRun) return;
-        this.run(options).catch(error => console.error('jest-browser-reporter: test execution failed', error));
+        this.runPromise = this.run(options);
+        this.runPromise.catch(error => console.error('jest-browser-reporter: test execution failed', error));
+    }
+
+    /** Runs all tests; a run in progress is stopped first. */
+    private runAllNow(): void {
+        const current = this.activeRun ? this.runPromise : null;
+        this.stop();
+        (current ?? Promise.resolve()).catch(() => undefined).then(() => this.runFromUi());
+    }
+
+    /**
+     * What an auto-run runs: `label` describes a limit (null for all tests); `null` when the saved
+     * filter selects nothing.
+     */
+    private planAutoRun(mode: 'filtered' | 'all', grep?: string): { options: RunOptions; label: string | null } | null {
+        if (grep) return { options: { filter: grep }, label: `?grep="${grep}"` };
+        const failedOnly = this.filter === 'fail';
+        if (mode === 'all' || (!this.search && !failedOnly)) return { options: {}, label: null };
+
+        // Results are not saved, so the other status filters cannot be applied before a run
+        let tests = getRegisteredTests().filter(t => t.runnable).map(t => t.fullName);
+        if (this.search) tests = tests.filter(name => name.toLowerCase().includes(this.search));
+        if (failedOnly) {
+            const failed = new Set(this.failedTests);
+            tests = tests.filter(name => failed.has(name));
+        }
+        if (!tests.length) return null;
+
+        const parts = [
+            this.search ? `the search "${this.elements.search.value.trim()}"` : '',
+            failedOnly ? 'the tests that failed last time' : '',
+        ].filter(Boolean);
+        return { options: { tests }, label: parts.join(' and ') };
     }
 
     private emit<K extends keyof ReporterEventMap>(event: K, payload: ReporterEventMap[K]): void {
@@ -416,6 +522,25 @@ export class JestBrowserReporter {
         this.updateEstimate(run);
     }
 
+    /** A test tried to leave the page; the guard cancelled it. */
+    private onNavigationBlocked(run: ActiveRun, url: string): void {
+        const test = run.currentTest;
+        console.warn(`jest-browser-reporter: blocked a navigation to ${url} by ${test ? `"${test}"` : 'a hook'}`);
+        run.blockedNavigations.push({ test, url });
+
+        const count = run.blockedNavigations.length;
+        const message = count === 1
+            ? 'A test tried to leave the page. The navigation was blocked and the run went on:'
+            : `Tests tried to leave the page ${count} times. The navigations were blocked and the run went on:`;
+        const lines = [...new Set(run.blockedNavigations.map(n => `${n.test ?? 'A hook'} → ${n.url || 'another address'}`))];
+
+        if (!run.navigationNotice?.isConnected) run.navigationNotice = this.showNotice(message);
+        const body = run.navigationNotice.querySelector('.notice-body')!;
+        body.querySelector('.notice-text')!.textContent = message;
+        body.querySelector('.notice-details')?.remove();
+        body.insertAdjacentHTML('beforeend', renderNoticeDetails(lines));
+    }
+
     /** Time left, from the remembered durations of the tests that have not finished. */
     private updateEstimate(run: ActiveRun): void {
         const remainingMs = this.durations.estimate(run.remaining);
@@ -426,7 +551,9 @@ export class JestBrowserReporter {
 
     /** A test excluded by the filter keeps its previous result, marked as stale. */
     private showResult(result: TestResult): void {
-        if (result.filteredOut && this.shown.has(result.fullName)) {
+        const existing = this.shown.get(result.fullName);
+        if (result.filteredOut && existing && this.placeholders.has(existing)) return; // still not run
+        if (result.filteredOut && existing) {
             this.stale.add(result.fullName);
             this.table.setStale(result.fullName, true);
             return;
@@ -436,16 +563,24 @@ export class JestBrowserReporter {
         this.table.upsert(result, false);
     }
 
-    private finishRun(summary: RunSummary, fullRun: boolean): void {
+    private finishRun(summary: RunSummary, fullRun: boolean, testCount: number): void {
         if (summary.aborted) {
             this.indicator.showIdle(`Run stopped: ${summary.counts.cancel} tests cancelled.`);
+        } else if (testCount === 0) {
+            this.indicator.showIdle(summary.counts.skip
+                ? 'No test was run: the selected tests are all skipped (.skip). To run one anyway, use "▶ Run" in its row.'
+                : 'No test was run: no test matches the selection.');
         } else {
             this.indicator.hide();
         }
         this.settings.save({ failedTests: this.failedTests });
 
         const completeFullRun = fullRun && !summary.aborted;
-        this.timing = { durationMs: summary.durationMs, previousMs: completeFullRun ? this.durations.lastFullRunMs : null };
+        this.timing = {
+            durationMs: summary.durationMs,
+            previousMs: completeFullRun ? this.durations.lastFullRunMs : null,
+            partial: !fullRun,
+        };
         if (completeFullRun) this.durations.lastFullRunMs = summary.durationMs;
         this.durations.save();
         this.refreshSummary();
@@ -513,16 +648,70 @@ export class JestBrowserReporter {
         this.elements.runFailed.disabled = running || failedCount === 0;
         // Without a search or status filter, "Run Filtered" would be "Run All"
         const filterActive = !!this.search || this.filter !== 'all';
-        const filteredCount = filterActive ? this.filteredTests().length : 0;
-        this.elements.runFiltered.textContent = LABELS.runFiltered(filteredCount);
-        this.elements.runFiltered.disabled = running || filteredCount === 0;
-        this.elements.export.disabled = running || this.shown.size === 0;
+        const matching = filterActive ? this.filteredTests(true) : [];
+        const runnableCount = matching.filter(name => !this.skippedTests().has(name)).length;
+        this.elements.runFiltered.textContent = LABELS.runFiltered(runnableCount);
+        this.elements.runFiltered.disabled = running || runnableCount === 0;
+        this.elements.runFiltered.title = matching.length && !runnableCount
+            ? 'The tests shown are all skipped (.skip). To run one anyway, use "▶ Run" in its row.'
+            : 'Run the tests shown by the search and status filter (Ctrl+Shift+Enter)';
+        this.elements.export.disabled = running || this.realResults().length === 0;
     }
 
-    /** Full names of the tests matching the search text and status filter, as the table shows them. */
-    private filteredTests(): string[] {
+    private realResults(): TestResult[] {
+        return [...this.shown.values()].filter(r => !this.placeholders.has(r));
+    }
+
+    /**
+     * Gives every registered test a row, in registration order: its result if it has one, otherwise
+     * a placeholder. Rebuilds the table.
+     */
+    private syncWithRegistry(): void {
+        const registered = getRegisteredTests();
+        if (!registered.length) return;
+        const ordered = new Map<string, TestResult>();
+        for (const test of registered) {
+            let result = this.shown.get(test.fullName);
+            if (!result) {
+                result = normalizeResult({
+                    name: test.name,
+                    suitePath: test.suitePath,
+                    fullName: test.fullName,
+                    // 'pending' is a display-only status: shown as "NOT RUN", never in a result
+                    status: (test.runnable ? 'pending' : 'skip') as TestStatus,
+                    duration: null,
+                    previousDuration: this.durations.get(test.fullName),
+                });
+                this.placeholders.add(result);
+            }
+            ordered.set(test.fullName, result);
+        }
+        for (const [name, result] of this.shown) if (!ordered.has(name)) ordered.set(name, result);
+        this.shown.clear();
+        for (const [name, result] of ordered) this.shown.set(name, result);
+        this.rebuildTable();
+        this.refreshSummary();
+    }
+
+    /** Full names of the registered tests that never run (`.skip`, no body). */
+    private skippedTests(): Set<string> {
+        return new Set(getRegisteredTests().filter(t => !t.runnable).map(t => t.fullName));
+    }
+
+    /**
+     * Full names of the tests matching the search text and status filter, as the table shows them;
+     * without `includeSkipped`, only those that can run.
+     */
+    private filteredTests(includeSkipped = false): string[] {
+        const matching = this.matchingTests();
+        if (includeSkipped) return matching;
+        const skipped = this.skippedTests();
+        return matching.filter(name => !skipped.has(name));
+    }
+
+    private matchingTests(): string[] {
         const matchesSearch = (fullName: string) => !this.search || fullName.toLowerCase().includes(this.search);
-        if (!this.shown.size) {
+        if (!this.realResults().length) {
             // Nothing run yet: only the search can apply, to the registered tests
             return this.filter === 'all'
                 ? getRegisteredTests().map(t => t.fullName).filter(matchesSearch)
@@ -558,8 +747,8 @@ export class JestBrowserReporter {
     private exportResults(): void {
         const data = {
             exportedAt: new Date().toISOString(),
-            counts: countStatuses([...this.shown.values()].map(r => r.status)),
-            results: [...this.shown.values()].map(toSerializable),
+            counts: countStatuses(this.realResults().map(r => r.status)),
+            results: this.realResults().map(toSerializable),
         };
         const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
         const link = document.createElement('a');
@@ -607,10 +796,6 @@ export class JestBrowserReporter {
         this.table.toggleGroup(groupKey);
         this.settings.save({ collapsedGroups: [...this.collapsedGroups] });
         this.applyFilter();
-    }
-
-    private hideNotice(): void {
-        this.elements.notice.classList.add('hidden');
     }
 
     private handleClick(ev: MouseEvent): void {

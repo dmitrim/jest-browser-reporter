@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Auto-run with a test that navigates away</title>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="module">
+        import { createTestPage } from 'jest-browser-reporter';
+
+        // Counts page loads, to detect a reload loop
+        sessionStorage.setItem('loads', String(Number(sessionStorage.getItem('loads') || 0) + 1));
+
+        createTestPage({
+            container: '#root',
+            autoRun: true,
+            confirmLeaveWhileRunning: false,
+            blockNavigation: false, // tests the fallback: the page really goes away
+            tests: () => {
+                describe('Licensing', () => {
+                    it('works', () => { });
+                    // Like a Node.js-only test that assigns globalThis.location: skipped in the browser
+                    it.skip('navigates away when run', () => { location.reload(); return new Promise(() => { }); });
+                });
+                describe('Navigation', () => {
+                    it('reloads the page', () => { location.reload(); return new Promise(() => { }); });
+                });
+            },
+        }).then(reporter => (window.reporter = reporter));
+    </script>
+</body>
+</html>

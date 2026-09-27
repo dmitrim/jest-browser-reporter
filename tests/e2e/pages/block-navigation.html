@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Tests that try to leave the page</title>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="module">
+        import { createTestPage } from 'jest-browser-reporter';
+
+        const settle = () => new Promise(resolve => setTimeout(resolve, 100));
+
+        createTestPage({
+            container: '#root',
+            persistSettings: false,
+            tests: () => {
+                describe('Leaving', () => {
+                    it('assigns location.href', async () => { location.href = '/somewhere-else'; await settle(); });
+                    // What a Node.js-style test does when it fakes globalThis.location
+                    it('assigns an object to location', async () => { globalThis.location = { hostname: 'x' }; await settle(); });
+                    it('reloads', async () => { location.reload(); await settle(); });
+                    it('changes the hash (allowed)', async () => { location.hash = 'section'; await settle(); });
+                });
+                describe('Downloads', () => {
+                    it('saves a file with a download link (allowed)', async () => {
+                        const a = document.createElement('a');
+                        a.href = URL.createObjectURL(new Blob(['data'], { type: 'text/plain' }));
+                        a.download = 'result.txt';
+                        a.click();
+                        await settle();
+                    });
+                });
+            },
+        }).then(reporter => (window.reporter = reporter));
+    </script>
+</body>
+</html>

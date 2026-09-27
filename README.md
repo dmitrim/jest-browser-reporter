@@ -11,7 +11,7 @@ without a Node.js DOM emulation.
 
 ![jest-browser-reporter screenshot](https://raw.githubusercontent.com/dmitrim/jest-browser-reporter/main/docs/screenshot.png)
 
-- **Live results** with a progress bar and the estimated time left; results stream in while the run is going
+- **Every test listed** from the start (*not run* until it runs); **live results** with a progress bar and the estimated time left
 - **Stop** a run at any time; **Run Failed** re-runs just the failures; **Run Filtered** runs what the search shows; **▶ Run** on any row runs one test
 - **Search**, status filters, grouping by suite, **sorting** by status, name or duration — all remembered for the next visit
 - Durations like `850ms`, `1sec 234ms`, `2min 5sec`, with each test's **previous duration** (▲ slower / ▼ faster) and the total run time
@@ -74,14 +74,24 @@ order to get wrong. More setups — TypeScript, a plain `<script>` tag, CI — a
 | Column headers | Sort by status (failures first), test name or duration: ascending → descending → registration order |
 | Duration column | This run's time and, below it, the previous time of the test, with ▲ / ▼ when it changed by over 20% |
 | `Ctrl+Enter` / `Ctrl+Shift+Enter` / `Ctrl+F` / `Esc` | Run all / run filtered / focus search / clear search |
-| `?autorun`, `?grep=text` | Start a run on load / limit it to tests matching `text` |
+| `?autorun`, `?grep=text` | Start a run on load (like `autoRun: true`) / limit it to tests matching `text` |
+
+An **automatic run** (`autoRun: true` or `?autorun`) respects the saved filter: after a reload with a search
+text, only the matching tests run; with the status filter "Failed", only the tests that failed last time.
+A notice above the results says so and offers **Run all tests**. `autoRun: 'all'` always runs everything;
+**Run All** and `run()` are never limited.
 
 Test durations and the time of the last full run are remembered in `localStorage` (with the other settings);
 from them the progress bar shows the estimated time left, and the summary shows the total run time next to
 the previous one.
 
-While tests run, closing or reloading the page asks for confirmation. If the page is left anyway,
-the next load tells which test was running at the time.
+While tests run, a test **cannot navigate the page away**: `location.href = …`, `location.reload()` or a
+`location` assigned an object are silently cancelled, and a notice names the test and the address it tried to
+open; the run goes on (downloads and `#hash` changes are not affected). This needs the Navigation API
+(Chromium 102+, recent Firefox and Safari). Closing or reloading the page yourself asks for confirmation.
+If the page is left anyway,
+the next load tells which test was running at the time, and does not start an automatic run — so a test that
+navigates away cannot restart the run in a loop.
 
 ## Supported test API
 
@@ -120,17 +130,18 @@ For full control — e.g. when the tests are already loaded.
 | `title` | — | Heading above the results |
 | `backLink` | `false` | `true` for "← Back" (history), or a URL |
 | `groupBySuite` | `false` | Group by top-level `describe` |
-| `autoRun` | `false` | Start a run right away |
+| `autoRun` | `false` | Start a run right away: `true` (or `'filtered'`) runs what the saved search / "Failed" filter selects, `'all'` runs everything |
 | `persistSettings` | `true` | Remember filters, search, grouping, sorting, collapsed groups, failed tests and test durations |
 | `storageKey` | `'jest-browser-reporter:' + location.pathname` | `localStorage` key |
 | `theme` | `'light'` | `'light'`, `'dark'` or `'auto'` |
 | `defaultTimeout` | `5000` | Test and hook timeout, ms; same as `jest.setTimeout()` |
+| `blockNavigation` | `true` | Cancel navigations started by tests during a run, and report them |
 | `confirmLeaveWhileRunning` | `true` | Ask before leaving the page during a run |
 | `urlParams` | `true` | Honor `?autorun` and `?grep=` |
 
 | Member | |
 |---|---|
-| `run(options?)` | Runs tests and resolves with a `RunSummary` (`results`, `counts`, `durationMs`, `aborted`). `options`: `filter` (string, `RegExp` or `(test) => boolean`), `tests` (full names), `onlyFailed`, `signal` (`AbortSignal`) |
+| `run(options?)` | Runs tests and resolves with a `RunSummary` (`results`, `counts`, `durationMs`, `aborted`, `blockedNavigations`). `options`: `filter` (string, `RegExp` or `(test) => boolean`), `tests` (full names), `onlyFailed`, `signal` (`AbortSignal`) |
 | `runFailed()` | `run({ onlyFailed: true })` |
 | `runFiltered()` | Runs the tests the table shows for the current search and status filter |
 | `stop()` | Stops after the running test |
@@ -201,11 +212,14 @@ Shipped in the package under `examples/`:
 
 ## Good to know
 
-- Tests run **in the page itself**, one at a time. A test that navigates away — for example by
-  assigning `window.location` — ends the run; the page then reports where it stopped.
+- Tests run **in the page itself**, one at a time. A test that tries to navigate away — for example by
+  assigning `window.location` — is stopped from doing so where the Navigation API exists; elsewhere it ends
+  the run, and the page reports where it stopped.
 - There are no fake timers: timers and `Date` are real.
 - A test that is running cannot be interrupted; **Stop** takes effect after it.
 - Tests are identified by their full name; give tests in the same `describe` distinct names.
+- Patterns (search, **Run Filtered**, `run({ filter })`, `?grep`, auto-run) never select `.skip` tests, like Jest's `-t`;
+  to run a skipped test anyway, use **▶ Run** in its row (or `run({ tests: [fullName] })`). All of them ignore `.only`.
 
 ## Migrating from 1.x
 

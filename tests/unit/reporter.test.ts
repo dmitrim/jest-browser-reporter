@@ -177,22 +177,47 @@ describe('JestBrowserReporter', () => {
         const search = $('.search-input') as HTMLInputElement;
         search.value = 'MATH';
         search.dispatchEvent(new Event('input'));
-        // Before the first run the search applies to the registered tests
-        await vi.waitFor(() => expect(runFiltered.textContent).toContain('(3)'));
+        // Before the first run the search applies to the registered tests; the .skip one is not counted
+        await vi.waitFor(() => expect(runFiltered.textContent).toContain('(2)'));
 
         const done = new Promise<import('../../src/types').RunSummary>(resolve => reporter!.on('runFinish', resolve));
         runFiltered.click();
         const first = await done;
-        expect(first.results.filter(r => !r.filteredOut).map(r => r.name)).toEqual(['adds', 'fails <b>html</b>', 'skipped']);
+        expect(first.results.filter(r => !r.filteredOut).map(r => r.name)).toEqual(['adds', 'fails <b>html</b>']);
 
         $('.filter-btn[data-filter="fail"]').click();
         expect(runFiltered.textContent).toContain('(1)');
         const second = await reporter.runFiltered();
-        expect(second.results.filter(r => !r.filteredOut).map(r => r.name)).toEqual(['fails <b>html</b>']);
+        expect(second.results.filter(r => !r.filteredOut && r.status !== 'skip').map(r => r.name)).toEqual(['fails <b>html</b>']);
 
         search.value = 'no such test';
         search.dispatchEvent(new Event('input'));
         await vi.waitFor(() => expect(runFiltered.disabled).toBe(true));
+    });
+
+    it('Run Filtered skips .skip tests, but a row button runs one anyway', async () => {
+        registerSampleTests();
+        reporter = new lib.JestBrowserReporter({ container: '#root' });
+        await reporter.run();
+
+        const search = $('.search-input') as HTMLInputElement;
+        search.value = 'skipped';
+        search.dispatchEvent(new Event('input'));
+        const runFiltered = $('.run-filtered-btn') as HTMLButtonElement;
+        await vi.waitFor(() => expect(runFiltered.title).toContain('all skipped'));
+        expect(runFiltered.disabled).toBe(true);
+
+        // A pattern selects nothing that can run, and says so
+        await reporter.run({ filter: 'skipped' });
+        expect($('.running-indicator').textContent).toContain('No test was run: the selected tests are all skipped');
+
+        // The row button forces the skipped test
+        const skipRow = $('tr[data-id="Math › skipped"] .run-btn') as HTMLButtonElement;
+        expect(skipRow.title).toContain('run it anyway');
+        const done = new Promise<import('../../src/types').RunSummary>(resolve => reporter!.on('runFinish', resolve));
+        skipRow.click();
+        const forced = await done;
+        expect(forced.results.find(r => r.fullName === 'Math › skipped')!.status).toBe('pass');
     });
 
     it('matches a saved search case-insensitively after a reload', async () => {
@@ -335,6 +360,114 @@ describe('JestBrowserReporter', () => {
         const running = reporter.run();
         await expect(reporter.run()).rejects.toThrow('already running');
         await running;
+    });
+});
+
+describe('auto-run with a saved filter', () => {
+    const finished = (r: InstanceType<Lib['JestBrowserReporter']>) =>
+        new Promise<import('../../src/types').RunSummary>(resolve => r.on('runFinish', resolve));
+    // Tests that actually ran: not excluded by the filter and not .skip
+    const ran = (s: import('../../src/types').RunSummary) =>
+        s.results.filter(r => !r.filteredOut && r.status !== 'skip').map(r => r.fullName);
+
+    it('runs only the tests matching the saved search and says so', async () => {
+        registerSampleTests();
+        localStorage.setItem('jest-browser-reporter:/', JSON.stringify({ search: 'Math' }));
+        reporter = new lib.JestBrowserReporter({ container: '#root', autoRun: true });
+        const summary = await finished(reporter);
+
+        expect(ran(summary)).toEqual(['Math › adds', 'Math › fails <b>html</b>']);
+        expect($('.notice-text').textContent).toContain('limited to the search "Math"');
+        expect($('.stat.time .stat-label').textContent).toBe('Duration · filtered run');
+
+        // "Run all tests" in the notice runs everything and removes the notice
+        const all = finished(reporter);
+        $('.notice-action').click();
+        expect(ran(await all)).toHaveLength(3);
+        expect($('.reporter-notice')).toBeNull();
+    });
+
+    it('with the saved status filter "Failed", runs the remembered failed tests', async () => {
+        registerSampleTests();
+        localStorage.setItem('jest-browser-reporter:/', JSON.stringify({ filter: 'fail', failedTests: ['Async › waits'] }));
+        reporter = new lib.JestBrowserReporter({ container: '#root', autoRun: true });
+        expect(ran(await finished(reporter))).toEqual(['Async › waits']);
+        expect($('.notice-text').textContent).toContain('the tests that failed last time');
+    });
+
+    it('runs nothing when the saved filter matches nothing', async () => {
+        registerSampleTests();
+        localStorage.setItem('jest-browser-reporter:/', JSON.stringify({ search: 'no such test' }));
+        reporter = new lib.JestBrowserReporter({ container: '#root', autoRun: true });
+        await new Promise(resolve => setTimeout(resolve, 20));
+        expect(reporter.isRunning).toBe(false);
+        expect($('.running-indicator').textContent).toContain('no test that can run matches the saved filter');
+    });
+
+    it("autoRun: 'all' and an explicit run() ignore the saved filter", async () => {
+        registerSampleTests();
+        localStorage.setItem('jest-browser-reporter:/', JSON.stringify({ search: 'Math' }));
+        reporter = new lib.JestBrowserReporter({ container: '#root', autoRun: 'all' });
+        expect(ran(await finished(reporter))).toHaveLength(3);
+        expect($('.reporter-notice')).toBeNull();
+        expect(ran(await reporter.run())).toHaveLength(3);
+    });
+
+    it('does not auto-run after an interrupted run, so a navigating test cannot loop', async () => {
+        registerSampleTests();
+        sessionStorage.setItem('jest-browser-reporter:/:run', JSON.stringify({ testCount: 4, done: 1, currentTest: 'Math › adds' }));
+        reporter = new lib.JestBrowserReporter({ container: '#root', autoRun: true });
+        await new Promise(resolve => setTimeout(resolve, 20));
+
+        expect(reporter.isRunning).toBe(false);
+        expect($('.notice-text').textContent).toContain('"Math › adds" was running');
+        expect($('.running-indicator').textContent).toContain('automatic run was not started');
+
+        // The next load auto-runs again
+        reporter.destroy();
+        reporter = new lib.JestBrowserReporter({ container: '#root', autoRun: true });
+        expect((await finished(reporter)).counts.total).toBe(4);
+    });
+});
+
+describe('rows of tests without results', () => {
+    it('lists every registered test before the first run: NOT RUN, or SKIP for .skip tests', () => {
+        registerSampleTests();
+        reporter = new lib.JestBrowserReporter({ container: '#root' });
+
+        expect($$('tr.group-row').map(r => [r.dataset.id, r.dataset.status])).toEqual([
+            ['Math › adds', 'pending'], ['Math › fails <b>html</b>', 'pending'], ['Math › skipped', 'skip'], ['Async › waits', 'pending'],
+        ]);
+        expect($('tr[data-id="Math › adds"] .status-indicator').textContent).toContain('NOT RUN');
+        expect(stat('total')).toBe('4');
+        expect(reporter.results).toEqual([]);
+        expect(($('.export-btn') as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it('after a reload whose saved search finds only .skip tests, they are listed and can be run from their row', async () => {
+        registerSampleTests();
+        localStorage.setItem('jest-browser-reporter:/', JSON.stringify({ search: 'skipped' }));
+        reporter = new lib.JestBrowserReporter({ container: '#root', autoRun: true });
+        await new Promise(resolve => setTimeout(resolve, 20));
+
+        expect(reporter.isRunning).toBe(false);
+        expect(visibleRows().map(r => [r.dataset.id, r.dataset.status])).toEqual([['Math › skipped', 'skip']]);
+
+        const done = new Promise<import('../../src/types').RunSummary>(resolve => reporter!.on('runFinish', resolve));
+        (visibleRows()[0].querySelector('.run-btn') as HTMLElement).click();
+        await done;
+        expect(visibleRows().map(r => [r.dataset.id, r.dataset.status])).toEqual([['Math › skipped', 'pass']]);
+        expect($('tr[data-id="Math › adds"]').dataset.status).toBe('pending'); // still not run
+        expect(reporter.results.map(r => r.fullName)).toEqual(['Math › skipped']);
+    });
+
+    it('keeps every row during a full run, updating statuses in place', async () => {
+        registerSampleTests();
+        reporter = new lib.JestBrowserReporter({ container: '#root' });
+        const running = reporter.run();
+        expect($$('tr.group-row')).toHaveLength(4);
+        await running;
+        expect($$('tr.group-row').map(r => r.dataset.status)).toEqual(['pass', 'fail', 'skip', 'pass']);
     });
 });
 

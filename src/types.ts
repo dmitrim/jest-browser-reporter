@@ -58,13 +58,14 @@ export type TestFilter = string | RegExp | ((test: TestInfo) => boolean);
 
 /**
  * Options of {@link JestBrowserReporter.run}. All given criteria must match.
- * Without any, the usual `.only` / `.skip` rules decide what runs;
- * with any, those rules are ignored and the criteria alone decide.
+ * Without any, the usual `.only` / `.skip` rules decide what runs. With any, `.only` is
+ * ignored, so tests outside the focus can be run. `.skip` tests run only when named in
+ * {@link RunOptions.tests}; a `filter` alone never selects them.
  */
 export interface RunOptions {
     /** Runs only tests matching the filter. */
     filter?: TestFilter;
-    /** Runs only the tests with these {@link TestInfo.fullName | full names}. */
+    /** Runs only the tests with these {@link TestInfo.fullName | full names} — `.skip` ones included. */
     tests?: readonly string[];
     /** Runs only the tests that failed last time. */
     onlyFailed?: boolean;
@@ -101,6 +102,16 @@ export interface RunSummary {
     durationMs: number;
     /** `true` if the run was stopped before all selected tests ran. */
     aborted: boolean;
+    /** Navigations away from the page that tests attempted and the reporter blocked (see {@link JestBrowserReporterOptions.blockNavigation}). */
+    blockedNavigations: BlockedNavigation[];
+}
+
+/** A navigation away from the page, attempted by a test and blocked. */
+export interface BlockedNavigation {
+    /** Full name of the test that was running, or `null` if none was (e.g. during a hook). */
+    test: string | null;
+    /** Where the page would have gone. */
+    url: string;
 }
 
 /** Events of {@link JestBrowserReporter.on}, with the payload type of each. */
@@ -145,10 +156,17 @@ export interface JestBrowserReporterOptions {
      */
     groupBySuite?: boolean;
     /**
-     * Starts a run as soon as the reporter is created.
+     * Starts a run as soon as the reporter is created (for {@link createTestPage}: once the tests are loaded).
+     *
+     * - `true` or `'filtered'` — runs what the saved filter selects: the tests matching the saved search
+     *   text, and only the remembered failed tests when the saved status filter is "Failed". Without a
+     *   saved filter, all tests run. A limited run is announced above the results, with a button to run all.
+     * - `'all'` — always runs all tests.
+     *
+     * `run()` and "Run All" are not affected: they always run all tests.
      * @defaultValue `false`
      */
-    autoRun?: boolean;
+    autoRun?: boolean | 'filtered' | 'all';
     /**
      * Remembers the status filter, search text, grouping, collapsed groups and the failed tests
      * in `localStorage`, and restores them on the next visit.
@@ -165,14 +183,23 @@ export interface JestBrowserReporterOptions {
     /** Default timeout in milliseconds for tests and hooks; same as calling `jest.setTimeout()`. */
     defaultTimeout?: number;
     /**
+     * While tests run, silently cancels navigations started by scripts — `location.href = …`,
+     * `location.reload()`, `location` assigned an object — and reports them in a notice and in
+     * {@link RunSummary.blockedNavigations}; the run goes on. Downloads, `#hash` / `pushState` changes and
+     * navigations by the user are not affected. Needs the Navigation API (Chromium 102+, recent Firefox
+     * and Safari); elsewhere, {@link confirmLeaveWhileRunning} and the interrupted-run notice remain.
+     * @defaultValue `true`
+     */
+    blockNavigation?: boolean;
+    /**
      * Asks for confirmation before the page is closed, reloaded or navigated away while tests run.
      * Browsers show the prompt only after the user has interacted with the page.
      * @defaultValue `true`
      */
     confirmLeaveWhileRunning?: boolean;
     /**
-     * Reads options from the page URL: `?autorun` starts a run, `?grep=text` limits it to
-     * tests matching `text` (as a string {@link TestFilter}).
+     * Reads options from the page URL: `?autorun` starts a run like `autoRun: true`; `?grep=text`
+     * limits it to tests matching `text` (as a string {@link TestFilter}) instead of the saved filter.
      * @defaultValue `true`
      */
     urlParams?: boolean;

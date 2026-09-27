@@ -18,11 +18,13 @@ export const LABELS = {
     groupCollapsed: '▸',
 };
 
-const STATUS_BADGES: Record<TestStatus, { icon: string; text: string }> = {
+/** `pending` marks the row of a test that has no result yet. */
+const STATUS_BADGES: Record<TestStatus | 'pending', { icon: string; text: string }> = {
     pass: { icon: '✓', text: 'PASS' },
     fail: { icon: '✕', text: 'FAIL' },
     skip: { icon: '○', text: 'SKIP' },
     cancel: { icon: '■', text: 'CANCELLED' },
+    pending: { icon: '·', text: 'NOT RUN' },
 };
 
 const FILTERS: Array<{ value: StatusFilter; label: string }> = [
@@ -51,10 +53,7 @@ export function renderLayout(state: LayoutState): string {
     return `
         ${backLink}
         ${title}
-        <div class="reporter-notice hidden" role="alert">
-            <span class="notice-text"></span>
-            <button class="notice-close" type="button" title="Dismiss">×</button>
-        </div>
+        <div class="reporter-notices"></div>
         <div class="running-indicator hidden" aria-live="polite"></div>
         <div class="test-results">
             <div class="test-summary">
@@ -97,6 +96,24 @@ function sortableHeader(column: SortColumn, label: string, cls: string): string 
 export interface RunTiming {
     durationMs: number;
     previousMs: number | null;
+    /** The run was limited to some tests. */
+    partial: boolean;
+}
+
+/** A dismissible notice above the results, optionally with an action button. */
+export function renderNotice(message: string, actionLabel?: string): string {
+    return `<div class="reporter-notice" role="alert">
+        <div class="notice-body"><span class="notice-text">${escapeHtml(message)}</span></div>
+        ${actionLabel ? `<button class="notice-action" type="button">${escapeHtml(actionLabel)}</button>` : ''}
+        <button class="notice-close" type="button" title="Dismiss">×</button>
+    </div>`;
+}
+
+/** Lines under a notice's message; beyond `limit`, a "… and N more" line. */
+export function renderNoticeDetails(lines: readonly string[], limit = 10): string {
+    const shown = lines.slice(0, limit).map(line => `<li>${escapeHtml(line)}</li>`).join('');
+    const more = lines.length > limit ? `<li>… and ${lines.length - limit} more</li>` : '';
+    return `<ul class="notice-details">${shown}${more}</ul>`;
 }
 
 export function renderStats(counts: StatusCounts, timing?: RunTiming | null): string {
@@ -104,7 +121,8 @@ export function renderStats(counts: StatusCounts, timing?: RunTiming | null): st
         `<div class="stat ${cls}"${title ? ` title="${escapeHtml(title)}"` : ''}><span class="stat-value">${value}</span><span class="stat-label">${label}</span></div>`;
     const time = timing
         ? stat('time', escapeHtml(formatDuration(timing.durationMs)),
-            timing.previousMs === null ? 'Duration' : `Duration · prev ${escapeHtml(formatDuration(timing.previousMs))}`,
+            timing.partial ? 'Duration · filtered run'
+                : timing.previousMs === null ? 'Duration' : `Duration · prev ${escapeHtml(formatDuration(timing.previousMs))}`,
             'Duration of the last run')
         : '';
     return stat('total', counts.total, 'Total')
@@ -141,7 +159,7 @@ export function renderGroupHeader(groupKey: string, collapsed: boolean): string 
  * One result row. Error and source panels are not rendered here: highlighting every row
  * up front is slow, so they are created when first opened.
  */
-export function renderTestRow(test: TestResult, groupKey: string, stale: boolean): string {
+export function renderTestRow(test: TestResult, groupKey: string, stale: boolean, runnable = true): string {
     const hasErrors = test.status === 'fail' && test.errors.length > 0;
     const badge = STATUS_BADGES[test.status] ?? { icon: '?', text: String(test.status).toUpperCase() };
     const path = test.suitePath.join(' › ');
@@ -170,7 +188,9 @@ export function renderTestRow(test: TestResult, groupKey: string, stale: boolean
         <div class="duration-cell">
             <span class="duration">${duration}</span>
             ${renderPreviousDuration(test)}
-            <button class="run-btn" type="button" title="Run this test only">${LABELS.runTest}</button>
+            <button class="run-btn" type="button" title="${runnable
+                ? 'Run this test only'
+                : 'Skipped with .skip: click to run it anyway'}">${LABELS.runTest}</button>
         </div>
     </td>
 </tr>`;

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `createTestPage()`: installs the globals, renders the reporter, loads the tests and optionally starts a run, in one call.
 - `jest-browser-reporter/globals` entry point: installs the globals on import and declares their TypeScript types.
+- The table lists every registered test from the start: tests without a result show as *NOT RUN* (`.skip` ones as *SKIP*) and can be searched and run from their row.
 - Results appear while the run is in progress, with a progress bar and the name of the running test.
 - **Stop** button and `reporter.stop()`; `run({ signal })` accepts an `AbortSignal`. Tests not run are reported with the new status `cancel`.
 - **Run Failed** button and `reporter.runFailed()`. Failed tests are remembered across visits.
@@ -17,9 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `reporter.on('runStart' | 'testStart' | 'testDone' | 'runFinish', handler)`.
 - Read-only `results`, `lastRun`, `failedTests`, `isRunning`.
 - Filters, search, grouping and collapsed groups are saved in `localStorage` and restored (`persistSettings`, `storageKey`).
+- Navigations started by tests during a run (`location.href = …`, `location.reload()`, `location` assigned an object) are cancelled and reported in a notice and in `RunSummary.blockedNavigations` (`blockNavigation` option; needs the Navigation API).
 - Confirmation before leaving the page during a run (`confirmLeaveWhileRunning`), and a notice on the next load naming the test that was running when the page was left.
 - CI mode: `?autorun` and `?grep=` URL parameters; the summary is published as `window.__JEST_BROWSER_RESULTS__` together with a `jest-browser-reporter:finish` event.
 - **Export JSON** button.
+- An automatic run is not started when the previous run did not finish, so a test that navigates the page away cannot restart runs forever.
+- An automatic run (`autoRun: true`, `?autorun`) runs what the saved search and "Failed" filter select, announced by a notice with a **Run all tests** button; `autoRun: 'all'` always runs everything.
 - Sorting by status, test name or duration by clicking a column header; the sort is remembered.
 - Durations are formatted by size: `850ms`, `1sec 234ms`, `2min 5sec`, `1h 3min`.
 - Test durations are remembered: each row shows the test's previous duration (▲ slower / ▼ faster), results carry `previousDuration`, the progress shows the estimated time left, the summary shows the run time next to the previous one, and the `runStart` event carries `estimatedMs`.
@@ -33,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - `run()` resolves with a `RunSummary` instead of an array of results.
 - A row's **▶ Run** runs exactly that test; before, it ran every test whose name contained its name.
+- A pattern (search, **Run Filtered**, `run({ filter })`, `?grep`, auto-run) no longer selects `.skip` tests; a row's **▶ Run** and `run({ tests })` still run a `.skip` test on request. `.only` is ignored by all of them.
 - Error details and source code are highlighted when first opened, not for every row up front.
 - The Prism theme is scoped to the reporter and no longer restyles the host page's code blocks.
 - Unsupported `jest.*` functions throw an error instead of logging a warning.

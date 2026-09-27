@@ -135,17 +135,25 @@
 .jest-browser-reporter .back-link:hover { background-color: var(--jbr-accent-soft); border-color: var(--jbr-accent); }
 .jest-browser-reporter .reporter-title { font-size: 24px; font-weight: 700; margin-bottom: 16px; }
 
-/* Notice (interrupted run, load errors) */
+/* Notices (interrupted run, limited auto-run, load errors) */
 .jest-browser-reporter .reporter-notice {
     display: flex; align-items: flex-start; gap: 12px; padding: 14px 18px; margin-bottom: 16px;
     border-radius: 10px; background: var(--jbr-skip-bg); color: var(--jbr-skip-fg);
     border: 1px solid var(--jbr-skip); font-weight: 500;
 }
-.jest-browser-reporter .notice-text { flex: 1; }
+.jest-browser-reporter .notice-body { flex: 1; min-width: 0; }
+.jest-browser-reporter .notice-details {
+    margin: 6px 0 0 18px; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; font-weight: normal; word-break: break-all;
+}
 .jest-browser-reporter .notice-close {
     background: none; border: none; font-size: 20px; line-height: 1; cursor: pointer; color: inherit; opacity: 0.7;
 }
 .jest-browser-reporter .notice-close:hover { opacity: 1; }
+.jest-browser-reporter .notice-action {
+    background: none; border: 1px solid currentColor; border-radius: 6px; padding: 2px 10px;
+    cursor: pointer; color: inherit; font-weight: 600; white-space: nowrap;
+}
+.jest-browser-reporter .notice-action:hover { background: rgba(0, 0, 0, 0.06); }
 
 /* Running indicator */
 .jest-browser-reporter .running-indicator {
@@ -271,6 +279,7 @@
 .jest-browser-reporter .status-fail { background-color: var(--jbr-fail-bg); color: var(--jbr-fail-fg); border-color: var(--jbr-fail); }
 .jest-browser-reporter .status-skip { background-color: var(--jbr-skip-bg); color: var(--jbr-skip-fg); border-color: var(--jbr-skip); }
 .jest-browser-reporter .status-cancel { background-color: var(--jbr-cancel-bg); color: var(--jbr-cancel-fg); border-color: var(--jbr-cancel); }
+.jest-browser-reporter .status-pending { background-color: transparent; color: var(--jbr-text-faint); border: 1px dashed var(--jbr-border-strong); }
 
 .jest-browser-reporter .test-main-content { min-width: 0; }
 .jest-browser-reporter .test-path { color: var(--jbr-text-muted); font-size: 13px; font-family: 'Consolas', 'Monaco', monospace; }
@@ -294,7 +303,7 @@
     padding: 4px 12px; border: 1px solid var(--jbr-border-strong); background: var(--jbr-surface); border-radius: 6px;
     cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s ease; color: var(--jbr-text-muted);
 }
-.jest-browser-reporter .run-btn:hover { background: var(--jbr-accent); color: #fff; border-color: var(--jbr-accent); }
+.jest-browser-reporter .run-btn:not(:disabled):hover { background: var(--jbr-accent); color: #fff; border-color: var(--jbr-accent); }
 .jest-browser-reporter.is-running .run-btn { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
 
 /* Groups */

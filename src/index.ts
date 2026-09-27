@@ -9,7 +9,7 @@ export { JestBrowserReporter, RESULTS_GLOBAL, FINISH_EVENT } from './reporter/Je
 export { setupJestLiteGlobals, resetJestLiteGlobals } from './runner/globals';
 export type {
     JestBrowserReporterOptions, TestPageOptions, ReporterTheme, ReporterEventMap,
-    RunOptions, TestFilter, RunSummary, StatusCounts, StatusFilter, TestInfo, TestResult, TestStatus,
+    RunOptions, TestFilter, RunSummary, BlockedNavigation, StatusCounts, StatusFilter, TestInfo, TestResult, TestStatus,
 } from './types';
 export type {
     JestLiteGlobals, Describe, It, Each, Hook, TestBody, DoneCallback, Expect, Matchers, Jest, Mock, Unsupported,

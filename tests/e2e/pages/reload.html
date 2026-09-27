@@ -12,6 +12,7 @@
         createTestPage({
             container: '#root',
             confirmLeaveWhileRunning: false,
+            blockNavigation: false, // tests the fallback: the page really goes away
             tests: () => {
                 describe('Suite', () => {
                     it('before', () => { });

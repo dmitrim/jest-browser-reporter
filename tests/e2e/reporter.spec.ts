@@ -136,6 +136,17 @@ test('sorting by column, formatted durations with the previous time, and a run e
     expect(await ids()).toEqual(['Math › adds', 'Math › fails', 'Math › skipped', 'Slow › step 1', 'Slow › step 2', 'Slow › step 3', 'Slow › step 4', 'Slow › step 5']);
 });
 
+test('a skipped test runs when started from its row', async ({ page }) => {
+    await openReporter(page);
+    await page.click('.run-all-btn');
+    await waitForRunEnd(page);
+    await expect(page.locator('tr[data-id="Math › skipped"]')).toHaveAttribute('data-status', 'skip');
+
+    await page.locator('tr[data-id="Math › skipped"] .run-btn').click();
+    await waitForRunEnd(page);
+    await expect(page.locator('tr[data-id="Math › skipped"]')).toHaveAttribute('data-status', 'pass');
+});
+
 test('error and source panels open on demand', async ({ page }) => {
     await openReporter(page);
     await page.click('.run-all-btn');
@@ -176,6 +187,66 @@ test('?autorun&grep= starts a filtered run', async ({ page }) => {
     await waitForRunEnd(page);
     const summary = await page.evaluate(() => (window as any).__JEST_BROWSER_RESULTS__);
     expect(summary.counts).toEqual({ total: 5, pass: 5, fail: 0, skip: 0, cancel: 0 });
+});
+
+test('after a reload, the auto-run runs only what the saved search finds', async ({ page }) => {
+    await openReporter(page);
+    await page.fill('.search-input', 'step');
+    await page.goto('/tests/e2e/pages/reporter.html?autorun');
+    await waitForRunEnd(page);
+
+    const summary = await page.evaluate(() => (window as any).__JEST_BROWSER_RESULTS__);
+    expect(summary.counts.total).toBe(5);
+    await expect(page.locator('.notice-text')).toContainText('limited to the search "step"');
+
+    await page.click('.notice-action'); // Run all tests
+    await page.waitForFunction(() => (window as any).__JEST_BROWSER_RESULTS__?.counts.total === 8);
+    await expect(page.locator('.reporter-notice')).toHaveCount(0);
+});
+
+test('a saved search never runs .skip tests', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('jest-browser-reporter:/tests/e2e/pages/navigate-autorun.html',
+        JSON.stringify({ search: 'licensing' })));
+    await page.goto('/tests/e2e/pages/navigate-autorun.html');
+    await waitForRunEnd(page);
+
+    const summary = await page.evaluate(() => (window as any).__JEST_BROWSER_RESULTS__);
+    expect(summary.counts).toMatchObject({ total: 1, pass: 1, fail: 0 });
+    expect(summary.results.find((r: any) => r.name === 'navigates away when run').status).toBe('skip');
+    expect(await page.evaluate(() => sessionStorage.getItem('loads'))).toBe('1'); // the skipped test did not navigate
+});
+
+test('navigations started by tests are blocked and reported; downloads still work', async ({ page }) => {
+    const loads: string[] = [];
+    page.on('load', () => loads.push(page.url()));
+    const download = page.waitForEvent('download');
+    await page.goto('/tests/e2e/pages/block-navigation.html?autorun');
+    await waitForRunEnd(page);
+
+    const summary = await page.evaluate(() => (window as any).__JEST_BROWSER_RESULTS__);
+    expect(summary.counts).toMatchObject({ total: 5, pass: 5 });
+    expect(summary.blockedNavigations.map((n: any) => [n.test, n.url.replace(/^http:\/\/localhost:\d+/, '')])).toEqual([
+        ['Leaving › assigns location.href', '/somewhere-else'],
+        ['Leaving › assigns an object to location', '/tests/e2e/pages/[object%20Object]'],
+        ['Leaving › reloads', '/tests/e2e/pages/block-navigation.html?autorun'],
+    ]);
+    await expect(page.locator('.reporter-notice')).toHaveCount(1);
+    await expect(page.locator('.notice-text')).toHaveText('Tests tried to leave the page 3 times. The navigations were blocked and the run went on:');
+    await expect(page.locator('.notice-details li')).toHaveCount(3);
+    await expect(page.locator('.notice-details li').first()).toContainText('Leaving › assigns location.href → http://localhost');
+    expect(loads).toHaveLength(1);
+    expect((await download).suggestedFilename()).toBe('result.txt');
+});
+
+test('a test that navigates away does not make the auto-run loop', async ({ page }) => {
+    await page.goto('/tests/e2e/pages/navigate-autorun.html');
+    // Load 1 auto-runs, "reloads the page" reloads; load 2 must not auto-run again
+    await page.waitForFunction(() => sessionStorage.getItem('loads') === '2' && (window as any).reporter);
+    await expect(page.locator('.notice-text')).toContainText('"Navigation › reloads the page" was running');
+    await expect(page.locator('.running-indicator')).toContainText('automatic run was not started');
+    await page.waitForTimeout(1000);
+    expect(await page.evaluate(() => sessionStorage.getItem('loads'))).toBe('2');
+    expect(await page.evaluate(() => (window as any).reporter.isRunning)).toBe(false);
 });
 
 test('asks for confirmation before leaving during a run', async ({ page }) => {

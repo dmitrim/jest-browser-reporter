@@ -8,7 +8,7 @@ export interface SortState {
 }
 
 /** Ascending status order: the outcomes that need attention first. */
-const STATUS_RANK: Record<TestStatus, number> = { fail: 0, cancel: 1, skip: 2, pass: 3 };
+const STATUS_RANK: Record<TestStatus | 'pending', number> = { fail: 0, cancel: 1, skip: 2, pass: 3, pending: 4 };
 
 /** A click on a header cycles: ascending → descending → no sorting (registration order). */
 export function nextSort(current: SortState | null, column: SortColumn): SortState | null {
