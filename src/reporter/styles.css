@@ -163,6 +163,8 @@
 .jest-browser-reporter .running-text { flex: 1; min-width: 0; }
 .jest-browser-reporter .running-line { display: flex; justify-content: space-between; gap: 12px; }
 .jest-browser-reporter .running-progress-text { font-family: 'Consolas', 'Monaco', monospace; color: var(--jbr-text-muted); }
+.jest-browser-reporter .running-line .running-main-text { flex: 1; }
+.jest-browser-reporter .running-estimate { color: var(--jbr-text-muted); font-weight: 500; white-space: nowrap; }
 .jest-browser-reporter .running-progress {
     height: 6px; border-radius: 3px; background: var(--jbr-border); overflow: hidden; margin: 6px 0;
 }
@@ -195,10 +197,12 @@
 .jest-browser-reporter .stat.fail .stat-value { color: var(--jbr-fail); }
 .jest-browser-reporter .stat.skip .stat-value { color: var(--jbr-skip); }
 .jest-browser-reporter .stat.cancel .stat-value { color: var(--jbr-cancel); }
+.jest-browser-reporter .stat.time .stat-value { color: var(--jbr-text); font-size: 20px; line-height: 1.3; white-space: nowrap; }
 
 .jest-browser-reporter .run-controls { display: flex; gap: 8px; flex-wrap: wrap; }
 .jest-browser-reporter .run-all-btn,
 .jest-browser-reporter .run-failed-btn,
+.jest-browser-reporter .run-filtered-btn,
 .jest-browser-reporter .export-btn {
     padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600;
     transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 6px;
@@ -208,6 +212,7 @@
 .jest-browser-reporter .run-all-btn:hover { background: var(--jbr-accent-hover); border-color: var(--jbr-accent-hover); }
 .jest-browser-reporter .run-all-btn.stop { background: var(--jbr-fail); border-color: var(--jbr-fail); }
 .jest-browser-reporter .run-failed-btn:not(:disabled):hover,
+.jest-browser-reporter .run-filtered-btn:not(:disabled):hover,
 .jest-browser-reporter .export-btn:not(:disabled):hover { border-color: var(--jbr-accent); color: var(--jbr-accent); }
 
 /* Filters */
@@ -279,6 +284,12 @@
 .jest-browser-reporter .toggle-source:hover { text-decoration: underline; }
 
 .jest-browser-reporter .duration { color: var(--jbr-text-muted); font-size: 14px; font-family: 'Consolas', 'Monaco', monospace; }
+.jest-browser-reporter .duration-prev { color: var(--jbr-text-faint); font-size: 12px; font-family: 'Consolas', 'Monaco', monospace; white-space: nowrap; margin-top: -6px; }
+.jest-browser-reporter .trend.slower { color: var(--jbr-fail); }
+.jest-browser-reporter .trend.faster { color: var(--jbr-pass); }
+.jest-browser-reporter th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.jest-browser-reporter th.sortable:hover { color: var(--jbr-accent); }
+.jest-browser-reporter .sort-indicator { font-size: 11px; color: var(--jbr-accent); }
 .jest-browser-reporter .run-btn {
     padding: 4px 12px; border: 1px solid var(--jbr-border-strong); background: var(--jbr-surface); border-radius: 6px;
     cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s ease; color: var(--jbr-text-muted);

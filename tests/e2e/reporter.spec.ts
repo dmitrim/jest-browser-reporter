@@ -86,6 +86,56 @@ test('the row button runs one test; the others keep their results, marked stale'
     await expect(stat(page, 'pass')).toHaveText('6');
 });
 
+test('Run Filtered runs exactly the tests found by the search', async ({ page }) => {
+    await openReporter(page);
+    await expect(page.locator('.run-filtered-btn')).toBeDisabled();
+
+    await page.fill('.search-input', 'step');
+    await expect(page.locator('.run-filtered-btn')).toHaveText(/Run Filtered \(5\)/);
+    await page.click('.run-filtered-btn');
+    await waitForRunEnd(page);
+
+    const summary = await page.evaluate(() => (window as any).__JEST_BROWSER_RESULTS__);
+    expect(summary.counts).toEqual({ total: 5, pass: 5, fail: 0, skip: 0, cancel: 0 });
+    await expect(rows(page).locator('visible=true')).toHaveCount(5);
+
+    await page.fill('.search-input', 'step 2');
+    await expect(page.locator('.run-filtered-btn')).toHaveText(/Run Filtered \(1\)/);
+    await page.keyboard.press('Control+Shift+Enter');
+    await waitForRunEnd(page);
+    expect((await page.evaluate(() => (window as any).__JEST_BROWSER_RESULTS__)).counts.total).toBe(1);
+});
+
+test('sorting by column, formatted durations with the previous time, and a run estimate', async ({ page }) => {
+    await openReporter(page, '?delay=1100');
+    await page.fill('.search-input', 'step 1');
+    await page.click('.run-filtered-btn');
+    await waitForRunEnd(page);
+    await expect(page.locator('tr[data-id="Slow › step 1"] .duration')).toHaveText(/^1sec \d+ms$/);
+    await expect(page.locator('.stat.time .stat-value')).toHaveText(/^1sec( \d+ms)?$/);
+
+    // Second run of the same test: previous duration and an estimate are known
+    await page.click('.run-filtered-btn');
+    await expect(page.locator('.running-main-text')).toHaveText(/Running selected tests · ≈ 1sec/);
+    await expect(page.locator('.running-estimate')).toHaveText(/≈ 1sec( \d+ms)? left/);
+    await waitForRunEnd(page);
+    await expect(page.locator('tr[data-id="Slow › step 1"] .duration-prev')).toHaveText(/prev 1sec \d+ms/);
+
+    await page.fill('.search-input', '');
+    await page.goto('/tests/e2e/pages/reporter.html');
+    await page.waitForFunction(() => (window as any).reporter);
+    await page.click('.run-all-btn');
+    await waitForRunEnd(page);
+    const ids = () => page.$$eval('tr.group-row', rows => rows.map(r => (r as HTMLElement).dataset.id));
+
+    await page.click('th[data-sort="status"]');
+    expect((await ids())[0]).toBe('Math › fails');
+    await page.click('th[data-sort="status"]');
+    expect((await ids())[0]).not.toBe('Math › fails');
+    await page.click('th[data-sort="status"]');
+    expect(await ids()).toEqual(['Math › adds', 'Math › fails', 'Math › skipped', 'Slow › step 1', 'Slow › step 2', 'Slow › step 3', 'Slow › step 4', 'Slow › step 5']);
+});
+
 test('error and source panels open on demand', async ({ page }) => {
     await openReporter(page);
     await page.click('.run-all-btn');

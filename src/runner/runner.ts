@@ -35,7 +35,8 @@ export interface TestRunOptions {
     /** When set, runs exactly the tests it accepts and ignores `.only` / `.skip`. */
     filter?: (test: TestInfo) => boolean;
     signal?: AbortSignal;
-    onRunStart?(testCount: number): void;
+    /** Called before the first test with the tests selected to run. */
+    onRunStart?(tests: TestInfo[]): void;
     onTestStart?(test: TestInfo): void;
     onTestDone?(result: TestResult): void;
 }
@@ -68,9 +69,11 @@ jestLite.addEventHandler((event: JestLiteEvent, currentState: JestLiteState) => 
 
     if (event.name === 'run_start') {
         forEachTest(currentState.rootDescribeBlock, resetTest);
-        let testCount = 0;
-        forEachTest(currentState.rootDescribeBlock, test => { if (shouldRunTest(test, currentState)) testCount++; });
-        run.options.onRunStart?.(testCount);
+        const selected: TestInfo[] = [];
+        forEachTest(currentState.rootDescribeBlock, test => {
+            if (shouldRunTest(test, currentState)) selected.push(getTestInfo(test));
+        });
+        run.options.onRunStart?.(selected);
     } else if (event.test && event.name === 'test_start') {
         run.options.onTestStart?.(getTestInfo(event.test));
     } else if (event.test && TERMINAL_EVENTS.has(event.name)) {

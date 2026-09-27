@@ -6,6 +6,7 @@ export class RunningIndicator {
     private progressBar: HTMLElement | null = null;
     private progressText: HTMLElement | null = null;
     private mainText: HTMLElement | null = null;
+    private estimateText: HTMLElement | null = null;
 
     constructor(private readonly element: HTMLElement) { }
 
@@ -22,6 +23,7 @@ export class RunningIndicator {
                 <div class="running-line">
                     <span class="running-main-text">${escapeHtml(message)}</span>
                     <span class="running-progress-text"></span>
+                    <span class="running-estimate"></span>
                 </div>
                 <div class="running-progress"><div class="running-progress-bar"></div></div>
                 <span class="running-status-text"></span>
@@ -31,6 +33,12 @@ export class RunningIndicator {
         this.statusText = this.element.querySelector('.running-status-text');
         this.progressBar = this.element.querySelector('.running-progress-bar');
         this.progressText = this.element.querySelector('.running-progress-text');
+        this.estimateText = this.element.querySelector('.running-estimate');
+    }
+
+    /** Estimated time left, e.g. "≈ 2min left"; empty to hide it. */
+    setEstimate(text: string): void {
+        if (this.estimateText) this.estimateText.textContent = text;
     }
 
     setMessage(message: string): void {
@@ -57,12 +65,12 @@ export class RunningIndicator {
 
     hide(): void {
         this.element.classList.add('hidden');
-        this.mainText = this.statusText = this.progressBar = this.progressText = null;
+        this.mainText = this.statusText = this.progressBar = this.progressText = this.estimateText = null;
     }
 
     private render(mode: 'idle' | 'running' | 'error', html: string): void {
         this.element.className = `running-indicator ${mode}`;
         this.element.innerHTML = html;
-        this.mainText = this.statusText = this.progressBar = this.progressText = null;
+        this.mainText = this.statusText = this.progressBar = this.progressText = this.estimateText = null;
     }
 }

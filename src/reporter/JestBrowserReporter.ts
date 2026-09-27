@@ -5,10 +5,12 @@ import { getRegisteredTests, runTests, TEST_TIMEOUT_KEY } from '../runner/runner
 import { createTestPredicate } from '../runner/testFilter';
 import { formatErrorsHtml, formatSourceCodeHtml } from '../utils/SourceCodeFormat';
 import { debounce, queryRequired } from '../utils/dom';
+import { formatDuration } from '../utils/format';
 import { ResultsTable } from './ResultsTable';
 import { RunningIndicator } from './RunningIndicator';
-import { RunRecordStore, SettingsStore } from './storage';
-import { LABELS, renderLayout, renderStats } from './templates';
+import { nextSort, type SortColumn, type SortState } from './sorting';
+import { DurationStore, RunRecordStore, SettingsStore } from './storage';
+import { LABELS, renderLayout, renderStats, type RunTiming } from './templates';
 import { countStatuses, normalizeResult, toSerializable } from './testResults';
 import './styles.css';
 
@@ -29,6 +31,12 @@ interface ActiveRun {
     /** Results received but not yet shown; flushed once per animation frame. */
     pending: TestResult[];
     frame: number;
+    /** Selected tests that have not finished yet, for the time estimate. */
+    remaining: Set<string>;
+    /** Real run time per remembered test time: covers hooks and overhead in the estimate. */
+    estimateScale: number;
+    /** Remembered duration of each test before this run. */
+    previous: Map<string, number | null>;
 }
 
 /**
@@ -51,12 +59,14 @@ export class JestBrowserReporter {
     private readonly indicator: RunningIndicator;
     private readonly settings: SettingsStore;
     private readonly runRecords: RunRecordStore;
+    private readonly durations: DurationStore;
     private readonly elements: {
         stats: HTMLElement;
         search: HTMLInputElement;
         searchClear: HTMLElement;
         runAll: HTMLButtonElement;
         runFailed: HTMLButtonElement;
+        runFiltered: HTMLButtonElement;
         export: HTMLButtonElement;
         notice: HTMLElement;
     };
@@ -66,6 +76,9 @@ export class JestBrowserReporter {
     private groupBySuite: boolean;
     private readonly collapsedGroups: Set<string>;
     private savedFailedTests: string[];
+    private sort: SortState | null;
+    /** Duration of the last finished run, shown in the summary. */
+    private timing: RunTiming | null = null;
 
     /** Shown results by full name, in registration order; merged across filtered runs. */
     private readonly shown = new Map<string, TestResult>();
@@ -86,6 +99,7 @@ export class JestBrowserReporter {
         ['.run-btn', el => this.runFromUi({ tests: [rowId(el)] })],
         ['.run-all-btn', () => this.activeRun ? this.stop() : this.runFromUi()],
         ['.run-failed-btn', () => this.runFromUi({ onlyFailed: true })],
+        ['.run-filtered-btn', () => this.runFromUi({ tests: this.filteredTests() })],
         ['.export-btn', () => this.exportResults()],
         ['.filter-btn', el => this.setFilter((el.dataset.filter as StatusFilter) || 'all')],
         ['.group-toggle-btn', () => this.toggleGrouping()],
@@ -94,6 +108,7 @@ export class JestBrowserReporter {
         ['.toggle-error', el => this.togglePanel(el, 'error')],
         ['.toggle-source', el => this.togglePanel(el, 'source')],
         ['.group-header', el => this.toggleGroup(el.dataset.group || '')],
+        ['th.sortable', el => this.toggleSort(el.dataset.sort as SortColumn)],
     ];
 
     /**
@@ -103,15 +118,18 @@ export class JestBrowserReporter {
     constructor(options: JestBrowserReporterOptions = {}) {
         this.options = options;
         const baseKey = options.storageKey || `jest-browser-reporter:${location.pathname}`;
-        this.settings = new SettingsStore(options.persistSettings === false ? null : baseKey);
+        const persist = options.persistSettings !== false;
+        this.settings = new SettingsStore(persist ? baseKey : null);
         this.runRecords = new RunRecordStore(baseKey);
+        this.durations = new DurationStore(persist ? baseKey : null);
 
         const saved = this.settings.load();
         this.filter = saved.filter ?? 'all';
-        this.search = saved.search ?? '';
+        this.search = normalizeSearch(saved.search ?? '');
         this.groupBySuite = saved.groupBySuite ?? !!options.groupBySuite;
         this.collapsedGroups = new Set(saved.collapsedGroups);
         this.savedFailedTests = saved.failedTests ?? [];
+        this.sort = saved.sort ?? null;
 
         if (options.defaultTimeout) (globalThis as unknown as Record<string, unknown>)[TEST_TIMEOUT_KEY] = options.defaultTimeout;
 
@@ -122,7 +140,7 @@ export class JestBrowserReporter {
             title: options.title,
             backLink: options.backLink ?? !!options.showBackLink,
             filter: this.filter,
-            search: this.search,
+            search: saved.search ?? '',
             groupBySuite: this.groupBySuite,
         });
         resolveContainer(options.container).appendChild(this.root);
@@ -133,12 +151,14 @@ export class JestBrowserReporter {
             searchClear: queryRequired(this.root, '.search-clear'),
             runAll: queryRequired<HTMLButtonElement>(this.root, '.run-all-btn'),
             runFailed: queryRequired<HTMLButtonElement>(this.root, '.run-failed-btn'),
+            runFiltered: queryRequired<HTMLButtonElement>(this.root, '.run-filtered-btn'),
             export: queryRequired<HTMLButtonElement>(this.root, '.export-btn'),
             notice: queryRequired(this.root, '.reporter-notice'),
         };
         this.table = new ResultsTable(queryRequired(this.root, '#test-results-body'), this.groupBySuite, this.collapsedGroups);
         this.table.clear(EMPTY_MESSAGE);
         this.indicator = new RunningIndicator(queryRequired(this.root, '.running-indicator'));
+        this.updateSortHeaders();
 
         this.root.addEventListener('click', e => this.handleClick(e));
         const applySearch = debounce(() => this.setSearch(this.elements.search.value), 180);
@@ -200,7 +220,10 @@ export class JestBrowserReporter {
         if (this.activeRun) throw new Error('jest-browser-reporter: tests are already running');
 
         const filter = createTestPredicate(options, this.failedTests);
-        const run: ActiveRun = { controller: new AbortController(), testCount: 0, done: 0, pending: [], frame: 0 };
+        const run: ActiveRun = {
+            controller: new AbortController(), testCount: 0, done: 0, pending: [], frame: 0,
+            remaining: new Set(), estimateScale: 1, previous: new Map(),
+        };
         const external = options.signal;
         const abort = () => this.stop();
         if (external?.aborted) run.controller.abort();
@@ -214,19 +237,30 @@ export class JestBrowserReporter {
             this.table.clear('Waiting for results…');
         }
         this.hideNotice();
+        this.timing = null;
         this.setRunningUi(true);
-        this.indicator.showRunning(filter ? 'Running selected tests' : 'Running all tests');
+        const message = filter ? 'Running selected tests' : 'Running all tests';
+        this.indicator.showRunning(message);
 
         const startedAt = Date.now();
         try {
             const { results, aborted } = await runTests({
                 filter,
                 signal: run.controller.signal,
-                onRunStart: testCount => {
-                    run.testCount = testCount;
-                    this.indicator.setProgress(0, testCount);
-                    this.runRecords.begin(testCount);
-                    this.emit('runStart', { testCount });
+                onRunStart: tests => {
+                    run.testCount = tests.length;
+                    run.remaining = new Set(tests.map(t => t.fullName));
+                    // A full run is best predicted by the last full run; otherwise sum the tests
+                    const testsMs = this.durations.estimate(run.remaining);
+                    const lastFullRunMs = this.durations.lastFullRunMs;
+                    const estimatedMs = !filter && lastFullRunMs !== null ? lastFullRunMs : testsMs;
+                    run.estimateScale = estimatedMs && testsMs ? estimatedMs / testsMs : 1;
+
+                    if (estimatedMs !== null) this.indicator.setMessage(`${message} · ≈ ${formatDuration(estimatedMs)}`);
+                    this.indicator.setProgress(0, run.testCount);
+                    this.updateEstimate(run);
+                    this.runRecords.begin(run.testCount);
+                    this.emit('runStart', { testCount: run.testCount, estimatedMs });
                 },
                 onTestStart: test => {
                     this.indicator.setStatus(test.fullName);
@@ -234,6 +268,13 @@ export class JestBrowserReporter {
                     this.emit('testStart', test);
                 },
                 onTestDone: result => {
+                    const previous = this.durations.get(result.fullName);
+                    run.previous.set(result.fullName, previous);
+                    result.previousDuration = previous;
+                    if (result.duration !== null && (result.status === 'pass' || result.status === 'fail')) {
+                        this.durations.set(result.fullName, result.duration);
+                    }
+                    run.remaining.delete(result.fullName);
                     if (result.status === 'pass' || result.status === 'fail') {
                         run.done++;
                         this.indicator.setProgress(run.done, run.testCount);
@@ -245,6 +286,7 @@ export class JestBrowserReporter {
             });
 
             this.flushPending(run);
+            for (const result of results) result.previousDuration = run.previous.get(result.fullName) ?? null;
             const summary: RunSummary = {
                 results,
                 counts: countStatuses(results.filter(r => !r.filteredOut).map(r => r.status)),
@@ -253,7 +295,7 @@ export class JestBrowserReporter {
                 aborted,
             };
             this.summary = summary;
-            this.finishRun(summary);
+            this.finishRun(summary, !filter);
             return summary;
         } catch (error) {
             this.indicator.showError('Test execution failed: ' + (error instanceof Error ? error.message : String(error)));
@@ -270,6 +312,14 @@ export class JestBrowserReporter {
     /** Runs only the tests that failed last time (see {@link failedTests}). */
     runFailed(): Promise<RunSummary> {
         return this.run({ onlyFailed: true });
+    }
+
+    /**
+     * Runs the tests the table currently shows: those matching the search text and the status
+     * filter. Before the first run, the search applies to the registered tests.
+     */
+    runFiltered(): Promise<RunSummary> {
+        return this.run({ tests: this.filteredTests() });
     }
 
     /**
@@ -321,10 +371,13 @@ export class JestBrowserReporter {
      * @internal
      */
     refreshIdleState(): void {
+        this.updateButtons(); // the registered tests may have changed
         if (this.activeRun || this.shown.size) return;
         const count = getRegisteredTests().length;
+        const lastRun = this.durations.lastFullRunMs;
         this.indicator.showIdle(count
-            ? `${count} tests registered. Press "Run All" (Ctrl+Enter) to start.`
+            ? `${count} tests registered${lastRun === null ? '' : `; the last full run took ${formatDuration(lastRun)}`}. `
+                + 'Press "Run All" (Ctrl+Enter) to start.'
             : 'No tests registered yet.');
     }
 
@@ -360,6 +413,15 @@ export class JestBrowserReporter {
         if (!run.pending.length) return;
         for (const result of run.pending.splice(0)) this.showResult(result);
         this.refreshSummary();
+        this.updateEstimate(run);
+    }
+
+    /** Time left, from the remembered durations of the tests that have not finished. */
+    private updateEstimate(run: ActiveRun): void {
+        const remainingMs = this.durations.estimate(run.remaining);
+        this.indicator.setEstimate(remainingMs === null || !run.remaining.size
+            ? ''
+            : `≈ ${formatDuration(remainingMs * run.estimateScale)} left`);
     }
 
     /** A test excluded by the filter keeps its previous result, marked as stale. */
@@ -374,13 +436,19 @@ export class JestBrowserReporter {
         this.table.upsert(result, false);
     }
 
-    private finishRun(summary: RunSummary): void {
+    private finishRun(summary: RunSummary, fullRun: boolean): void {
         if (summary.aborted) {
             this.indicator.showIdle(`Run stopped: ${summary.counts.cancel} tests cancelled.`);
         } else {
             this.indicator.hide();
         }
         this.settings.save({ failedTests: this.failedTests });
+
+        const completeFullRun = fullRun && !summary.aborted;
+        this.timing = { durationMs: summary.durationMs, previousMs: completeFullRun ? this.durations.lastFullRunMs : null };
+        if (completeFullRun) this.durations.lastFullRunMs = summary.durationMs;
+        this.durations.save();
+        this.refreshSummary();
 
         const published = { ...summary, results: summary.results.map(toSerializable) };
         (window as unknown as Record<string, unknown>)[RESULTS_GLOBAL] = published;
@@ -407,13 +475,31 @@ export class JestBrowserReporter {
     private rebuildTable(): void {
         const entries = [...this.shown.values()].map(result => ({ result, stale: this.stale.has(result.fullName) }));
         this.table.rebuild(entries, this.groupBySuite, EMPTY_MESSAGE);
+        if (this.sort) this.table.applySort(this.sort);
         this.applyFilter();
     }
 
     private refreshSummary(): void {
-        this.elements.stats.innerHTML = renderStats(countStatuses([...this.shown.values()].map(r => r.status)));
+        this.elements.stats.innerHTML = renderStats(countStatuses([...this.shown.values()].map(r => r.status)), this.timing);
+        if (this.sort) this.table.applySort(this.sort); // new rows are appended unsorted
         this.applyFilter();
         this.updateButtons();
+    }
+
+    private toggleSort(column: SortColumn): void {
+        this.sort = nextSort(this.sort, column);
+        this.settings.save({ sort: this.sort });
+        this.updateSortHeaders();
+        this.table.applySort(this.sort);
+    }
+
+    private updateSortHeaders(): void {
+        const sort = this.sort;
+        this.root.querySelectorAll<HTMLElement>('th.sortable').forEach(th => {
+            const direction = sort && sort.column === th.dataset.sort ? sort.direction : null;
+            th.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : direction === 'desc' ? 'descending' : 'none');
+            th.querySelector('.sort-indicator')!.textContent = direction === 'asc' ? ' ▲' : direction === 'desc' ? ' ▼' : '';
+        });
     }
 
     private applyFilter(): void {
@@ -425,7 +511,26 @@ export class JestBrowserReporter {
         const failedCount = this.failedTests.length;
         this.elements.runFailed.textContent = LABELS.runFailed(failedCount);
         this.elements.runFailed.disabled = running || failedCount === 0;
+        // Without a search or status filter, "Run Filtered" would be "Run All"
+        const filterActive = !!this.search || this.filter !== 'all';
+        const filteredCount = filterActive ? this.filteredTests().length : 0;
+        this.elements.runFiltered.textContent = LABELS.runFiltered(filteredCount);
+        this.elements.runFiltered.disabled = running || filteredCount === 0;
         this.elements.export.disabled = running || this.shown.size === 0;
+    }
+
+    /** Full names of the tests matching the search text and status filter, as the table shows them. */
+    private filteredTests(): string[] {
+        const matchesSearch = (fullName: string) => !this.search || fullName.toLowerCase().includes(this.search);
+        if (!this.shown.size) {
+            // Nothing run yet: only the search can apply, to the registered tests
+            return this.filter === 'all'
+                ? getRegisteredTests().map(t => t.fullName).filter(matchesSearch)
+                : [];
+        }
+        return [...this.shown.values()]
+            .filter(r => (this.filter === 'all' || r.status === this.filter) && matchesSearch(r.fullName))
+            .map(r => r.fullName);
     }
 
     private togglePanel(button: HTMLElement, kind: 'error' | 'source'): void {
@@ -474,13 +579,15 @@ export class JestBrowserReporter {
             btn.classList.toggle('active', btn.dataset.filter === filter));
         this.settings.save({ filter });
         this.applyFilter();
+        this.updateButtons();
     }
 
     private setSearch(value: string): void {
-        this.search = value.trim().toLowerCase();
+        this.search = normalizeSearch(value);
         this.elements.searchClear.classList.toggle('hidden', !value);
         this.settings.save({ search: value });
         this.applyFilter();
+        this.updateButtons();
     }
 
     private clearSearch(): void {
@@ -526,6 +633,9 @@ export class JestBrowserReporter {
         } else if (e.key === 'Escape' && document.activeElement === this.elements.search) {
             if (this.elements.search.value) this.clearSearch();
             else this.elements.search.blur();
+        } else if (ctrl && e.shiftKey && e.key === 'Enter') {
+            e.preventDefault();
+            if (!this.elements.runFiltered.disabled) this.runFromUi({ tests: this.filteredTests() });
         } else if (ctrl && e.key === 'Enter') {
             e.preventDefault();
             this.runFromUi();
@@ -541,6 +651,10 @@ function resolveContainer(container: HTMLElement | string | undefined): HTMLElem
     const element = document.querySelector<HTMLElement>(container);
     if (!element) throw new Error(`jest-browser-reporter: container "${container}" not found`);
     return element;
+}
+
+function normalizeSearch(value: string): string {
+    return value.trim().toLowerCase();
 }
 
 function rowId(element: HTMLElement): string {

@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Results appear while the run is in progress, with a progress bar and the name of the running test.
 - **Stop** button and `reporter.stop()`; `run({ signal })` accepts an `AbortSignal`. Tests not run are reported with the new status `cancel`.
 - **Run Failed** button and `reporter.runFailed()`. Failed tests are remembered across visits.
+- **Run Filtered** button (Ctrl+Shift+Enter) and `reporter.runFiltered()`: run the tests found by the search and the status filter.
 - A filtered run (a row's **▶ Run**, **Run Failed**, `run({ filter })`) keeps the results of the other tests, dimmed as not run this time.
 - `run()` options: `filter` (string, `RegExp` or predicate), `tests` (full names), `onlyFailed`, `signal`. It resolves with a `RunSummary`.
 - `reporter.on('runStart' | 'testStart' | 'testDone' | 'runFinish', handler)`.
@@ -19,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Confirmation before leaving the page during a run (`confirmLeaveWhileRunning`), and a notice on the next load naming the test that was running when the page was left.
 - CI mode: `?autorun` and `?grep=` URL parameters; the summary is published as `window.__JEST_BROWSER_RESULTS__` together with a `jest-browser-reporter:finish` event.
 - **Export JSON** button.
+- Sorting by status, test name or duration by clicking a column header; the sort is remembered.
+- Durations are formatted by size: `850ms`, `1sec 234ms`, `2min 5sec`, `1h 3min`.
+- Test durations are remembered: each row shows the test's previous duration (▲ slower / ▼ faster), results carry `previousDuration`, the progress shows the estimated time left, the summary shows the run time next to the previous one, and the `runStart` event carries `estimatedMs`.
 - Options `title`, `backLink` (boolean or URL), `theme` (`light` / `dark` / `auto`), `defaultTimeout`, `urlParams`; `container` also accepts a CSS selector.
 - `it.each`, `test.each`, `describe.each` and `it.todo`.
 - Real `jest.fn()`, `jest.spyOn()`, `jest.isMockFunction()`, `clearAllMocks()`, `resetAllMocks()`, `restoreAllMocks()` (jest-mock, bundled with jest-lite).

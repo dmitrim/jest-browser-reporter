@@ -11,9 +11,10 @@ without a Node.js DOM emulation.
 
 ![jest-browser-reporter screenshot](https://raw.githubusercontent.com/dmitrim/jest-browser-reporter/main/docs/screenshot.png)
 
-- **Live results** with a progress bar; results stream in while the run is going
-- **Stop** a run at any time; **Run Failed** re-runs just the failures; **▶ Run** on any row runs one test
-- **Search**, status filters, grouping by suite — all remembered for the next visit
+- **Live results** with a progress bar and the estimated time left; results stream in while the run is going
+- **Stop** a run at any time; **Run Failed** re-runs just the failures; **Run Filtered** runs what the search shows; **▶ Run** on any row runs one test
+- **Search**, status filters, grouping by suite, **sorting** by status, name or duration — all remembered for the next visit
+- Durations like `850ms`, `1sec 234ms`, `2min 5sec`, with each test's **previous duration** (▲ slower / ▼ faster) and the total run time
 - Error details and the test's **source code**, syntax-highlighted
 - Light, dark or automatic **theme**
 - **CI mode**: `?autorun` plus results on `window` for Playwright/Puppeteer
@@ -66,11 +67,18 @@ order to get wrong. More setups — TypeScript, a plain `<script>` tag, CI — a
 |---|---|
 | **Run All** / **Stop** | Runs every test / stops after the test that is running; the rest are reported as *cancelled* |
 | **Run Failed (N)** | Runs only the tests that failed last time — remembered across reloads |
+| **Run Filtered (N)** | Runs exactly the tests the table shows for the current search text and status filter; before the first run, the search applies to the registered tests |
 | **▶ Run** on a row | Runs just that test; the other rows keep their previous result, dimmed |
 | **Export JSON** | Downloads the shown results |
 | Search, status filters, **Group by Suite** | Filter the table; the choice is saved in `localStorage` |
-| `Ctrl+Enter` / `Ctrl+F` / `Esc` | Run all / focus search / clear search |
+| Column headers | Sort by status (failures first), test name or duration: ascending → descending → registration order |
+| Duration column | This run's time and, below it, the previous time of the test, with ▲ / ▼ when it changed by over 20% |
+| `Ctrl+Enter` / `Ctrl+Shift+Enter` / `Ctrl+F` / `Esc` | Run all / run filtered / focus search / clear search |
 | `?autorun`, `?grep=text` | Start a run on load / limit it to tests matching `text` |
+
+Test durations and the time of the last full run are remembered in `localStorage` (with the other settings);
+from them the progress bar shows the estimated time left, and the summary shows the total run time next to
+the previous one.
 
 While tests run, closing or reloading the page asks for confirmation. If the page is left anyway,
 the next load tells which test was running at the time.
@@ -113,7 +121,7 @@ For full control — e.g. when the tests are already loaded.
 | `backLink` | `false` | `true` for "← Back" (history), or a URL |
 | `groupBySuite` | `false` | Group by top-level `describe` |
 | `autoRun` | `false` | Start a run right away |
-| `persistSettings` | `true` | Remember filters, search, grouping, collapsed groups and failed tests |
+| `persistSettings` | `true` | Remember filters, search, grouping, sorting, collapsed groups, failed tests and test durations |
 | `storageKey` | `'jest-browser-reporter:' + location.pathname` | `localStorage` key |
 | `theme` | `'light'` | `'light'`, `'dark'` or `'auto'` |
 | `defaultTimeout` | `5000` | Test and hook timeout, ms; same as `jest.setTimeout()` |
@@ -124,6 +132,7 @@ For full control — e.g. when the tests are already loaded.
 |---|---|
 | `run(options?)` | Runs tests and resolves with a `RunSummary` (`results`, `counts`, `durationMs`, `aborted`). `options`: `filter` (string, `RegExp` or `(test) => boolean`), `tests` (full names), `onlyFailed`, `signal` (`AbortSignal`) |
 | `runFailed()` | `run({ onlyFailed: true })` |
+| `runFiltered()` | Runs the tests the table shows for the current search and status filter |
 | `stop()` | Stops after the running test |
 | `on(event, handler)` | `'runStart'`, `'testStart'`, `'testDone'`, `'runFinish'`; returns an unsubscribe function |
 | `results`, `lastRun`, `failedTests`, `isRunning` | Read-only state |

@@ -31,6 +31,11 @@ export interface TestResult extends TestInfo {
     errors: string[];
     /** Run time in milliseconds; `null` if the test did not run. */
     duration: number | null;
+    /**
+     * Run time in milliseconds the last time the test ran before this result, as remembered by the
+     * reporter (in `localStorage` when settings persist); `null` if unknown.
+     */
+    previousDuration?: number | null;
     /** Source code of the test function. */
     sourceCode?: string;
     /** `true` if the test was skipped only because the run filter excluded it. */
@@ -104,6 +109,11 @@ export interface ReporterEventMap {
     runStart: {
         /** Number of tests selected to run. */
         testCount: number;
+        /**
+         * Expected duration of the run in milliseconds, from the remembered durations of the selected
+         * tests (tests never run count as the average); `null` when no durations are known.
+         */
+        estimatedMs: number | null;
     };
     /** A test started. */
     testStart: TestInfo;

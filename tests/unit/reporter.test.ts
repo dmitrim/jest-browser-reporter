@@ -168,6 +168,99 @@ describe('JestBrowserReporter', () => {
         expect(visibleRows()).toHaveLength(0);
     });
 
+    it('runs the tests shown by the search and status filter', async () => {
+        registerSampleTests();
+        reporter = new lib.JestBrowserReporter({ container: '#root' });
+        const runFiltered = $('.run-filtered-btn') as HTMLButtonElement;
+        expect(runFiltered.disabled).toBe(true); // no filter: it would be "Run All"
+
+        const search = $('.search-input') as HTMLInputElement;
+        search.value = 'MATH';
+        search.dispatchEvent(new Event('input'));
+        // Before the first run the search applies to the registered tests
+        await vi.waitFor(() => expect(runFiltered.textContent).toContain('(3)'));
+
+        const done = new Promise<import('../../src/types').RunSummary>(resolve => reporter!.on('runFinish', resolve));
+        runFiltered.click();
+        const first = await done;
+        expect(first.results.filter(r => !r.filteredOut).map(r => r.name)).toEqual(['adds', 'fails <b>html</b>', 'skipped']);
+
+        $('.filter-btn[data-filter="fail"]').click();
+        expect(runFiltered.textContent).toContain('(1)');
+        const second = await reporter.runFiltered();
+        expect(second.results.filter(r => !r.filteredOut).map(r => r.name)).toEqual(['fails <b>html</b>']);
+
+        search.value = 'no such test';
+        search.dispatchEvent(new Event('input'));
+        await vi.waitFor(() => expect(runFiltered.disabled).toBe(true));
+    });
+
+    it('matches a saved search case-insensitively after a reload', async () => {
+        registerSampleTests();
+        localStorage.setItem('jest-browser-reporter:/', JSON.stringify({ search: 'WAIT' }));
+        reporter = new lib.JestBrowserReporter({ container: '#root' });
+        await reporter.run();
+        expect(visibleRows().map(r => r.dataset.id)).toEqual(['Async › waits']);
+    });
+
+    it('sorts by a column on header clicks and remembers the sort', async () => {
+        g.it('b slow', () => new Promise(resolve => setTimeout(resolve, 30)));
+        g.it('a fails', () => { throw new Error('x'); });
+        g.it('c fast', () => { });
+        reporter = new lib.JestBrowserReporter({ container: '#root' });
+        await reporter.run();
+        const order = () => $$('tr.group-row').map(r => r.dataset.id);
+        expect(order()).toEqual(['b slow', 'a fails', 'c fast']);
+
+        $('th[data-sort="name"]').click();
+        expect(order()).toEqual(['a fails', 'b slow', 'c fast']);
+        expect($('th[data-sort="name"]').getAttribute('aria-sort')).toBe('ascending');
+        $('th[data-sort="name"]').click();
+        expect(order()).toEqual(['c fast', 'b slow', 'a fails']);
+        $('th[data-sort="duration"]').click();
+        expect(order()[order().length - 1]).toBe('b slow');
+        expect($('th[data-sort="name"]').getAttribute('aria-sort')).toBe('none');
+        reporter.destroy();
+
+        reporter = new lib.JestBrowserReporter({ container: '#root' });
+        await reporter.run();
+        expect($('th[data-sort="duration"] .sort-indicator').textContent).toContain('▲');
+        expect(order()[order().length - 1]).toBe('b slow');
+        $('th[data-sort="duration"]').click();
+        $('th[data-sort="duration"]').click();
+        expect(order()).toEqual(['b slow', 'a fails', 'c fast']); // registration order again
+    });
+
+    it('remembers durations: previous time per test, run estimate, total time', async () => {
+        g.it('waits', () => new Promise(resolve => setTimeout(resolve, 40)));
+        g.it('quick', () => { });
+        reporter = new lib.JestBrowserReporter({ container: '#root' });
+
+        const first = await reporter.run();
+        expect(first.results[0].previousDuration).toBeNull();
+        expect($('.duration-prev')).toBeNull();
+        expect($('.stat.time .stat-label').textContent).toBe('Duration');
+        reporter.destroy();
+
+        reporter = new lib.JestBrowserReporter({ container: '#root' });
+        expect($('.running-indicator').textContent).toMatch(/the last full run took \d+ms/);
+        const starts: Array<number | null> = [];
+        reporter.on('runStart', e => starts.push(e.estimatedMs));
+        const second = await reporter.run();
+
+        expect(starts[0]).toBe(first.durationMs);
+        expect(second.results[0].previousDuration).toBe(first.results[0].duration);
+        expect($('tr[data-id="waits"] .duration-prev').textContent).toMatch(/prev \d+ms/);
+        expect($('.stat.time .stat-label').textContent).toContain('prev');
+    });
+
+    it('does not persist durations when settings do not persist', async () => {
+        g.it('t', () => { });
+        reporter = new lib.JestBrowserReporter({ container: '#root', persistSettings: false });
+        await reporter.run();
+        expect(localStorage.length).toBe(0);
+    });
+
     it('does not persist settings when disabled', async () => {
         reporter = new lib.JestBrowserReporter({ container: '#root', persistSettings: false });
         $('.filter-btn[data-filter="fail"]').click();

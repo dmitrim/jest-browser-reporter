@@ -1,6 +1,7 @@
 import type { StatusFilter, TestResult } from '../types';
 import { LABELS, formatGroupMeta, renderEmptyRow, renderGroupHeader, renderTestRow } from './templates';
 import { countStatuses, getGroupKey } from './testResults';
+import { createComparator, type SortState } from './sorting';
 
 export interface TableFilter {
     status: StatusFilter;
@@ -16,6 +17,7 @@ interface Group {
 /** The results `<tbody>`: rows are added or replaced one at a time, so results can stream in. */
 export class ResultsTable {
     private readonly rows = new Map<string, HTMLTableRowElement>();
+    private readonly results = new Map<string, TestResult>();
     private readonly groups = new Map<string, Group>();
 
     constructor(
@@ -26,6 +28,7 @@ export class ResultsTable {
 
     clear(emptyMessage: string): void {
         this.rows.clear();
+        this.results.clear();
         this.groups.clear();
         this.tbody.innerHTML = renderEmptyRow(emptyMessage);
     }
@@ -58,6 +61,30 @@ export class ResultsTable {
             }
         }
         this.rows.set(result.fullName, row);
+        this.results.set(result.fullName, result);
+    }
+
+    /**
+     * Reorders the rows (within their group when grouped); `null` restores registration order.
+     * Rows added later are appended, so call it again after adding rows.
+     */
+    applySort(sort: SortState | null): void {
+        const order = new Map([...this.results.keys()].map((name, index) => [name, index]));
+        const compare = sort ? createComparator(sort, order) : null;
+        const sorted = (names: Iterable<string>) => {
+            const list = [...names].map(name => this.results.get(name)!).filter(Boolean);
+            list.sort(compare ?? ((a, b) => order.get(a.fullName)! - order.get(b.fullName)!));
+            return list.map(result => this.rows.get(result.fullName)!);
+        };
+
+        if (!this.grouped) {
+            this.tbody.append(...sorted(this.rows.keys()));
+            return;
+        }
+        for (const group of this.groups.values()) {
+            group.rows = sorted(group.rows.map(row => row.dataset.id!));
+            group.header.after(...group.rows);
+        }
     }
 
     setStale(fullName: string, stale: boolean): void {

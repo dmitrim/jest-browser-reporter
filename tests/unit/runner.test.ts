@@ -137,12 +137,12 @@ describe('runTests', () => {
         const events: string[] = [];
 
         await runner.runTests({
-            onRunStart: count => events.push(`start:${count}`),
+            onRunStart: tests => events.push(`start:${tests.map(t => t.name).join(',')}`),
             onTestStart: t => events.push(`test:${t.name}`),
             onTestDone: r => events.push(`done:${r.name}:${r.status}`),
         });
 
-        expect(events).toEqual(['start:2', 'test:one', 'done:one:pass', 'test:two', 'done:two:fail', 'done:three:skip']);
+        expect(events).toEqual(['start:one,two', 'test:one', 'done:one:pass', 'test:two', 'done:two:fail', 'done:three:skip']);
     });
 
     it('rejects a second concurrent run', async () => {
