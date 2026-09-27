@@ -1,7 +1,5 @@
-# ignore patterns via glob syntax
-syntax: glob
-
-# patterns for client components
 node_modules/
 dist/
-.vs
+.vs/
+test-results/
+playwright-report/

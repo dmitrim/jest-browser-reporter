@@ -4,15 +4,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.0] - Unreleased
+### Added
+- `createTestPage()`: installs the globals, renders the reporter, loads the tests and optionally starts a run, in one call.
+- `jest-browser-reporter/globals` entry point: installs the globals on import and declares their TypeScript types.
+- Results appear while the run is in progress, with a progress bar and the name of the running test.
+- **Stop** button and `reporter.stop()`; `run({ signal })` accepts an `AbortSignal`. Tests not run are reported with the new status `cancel`.
+- **Run Failed** button and `reporter.runFailed()`. Failed tests are remembered across visits.
+- A filtered run (a row's **▶ Run**, **Run Failed**, `run({ filter })`) keeps the results of the other tests, dimmed as not run this time.
+- `run()` options: `filter` (string, `RegExp` or predicate), `tests` (full names), `onlyFailed`, `signal`. It resolves with a `RunSummary`.
+- `reporter.on('runStart' | 'testStart' | 'testDone' | 'runFinish', handler)`.
+- Read-only `results`, `lastRun`, `failedTests`, `isRunning`.
+- Filters, search, grouping and collapsed groups are saved in `localStorage` and restored (`persistSettings`, `storageKey`).
+- Confirmation before leaving the page during a run (`confirmLeaveWhileRunning`), and a notice on the next load naming the test that was running when the page was left.
+- CI mode: `?autorun` and `?grep=` URL parameters; the summary is published as `window.__JEST_BROWSER_RESULTS__` together with a `jest-browser-reporter:finish` event.
+- **Export JSON** button.
+- Options `title`, `backLink` (boolean or URL), `theme` (`light` / `dark` / `auto`), `defaultTimeout`, `urlParams`; `container` also accepts a CSS selector.
+- `it.each`, `test.each`, `describe.each` and `it.todo`.
+- Real `jest.fn()`, `jest.spyOn()`, `jest.isMockFunction()`, `clearAllMocks()`, `resetAllMocks()`, `restoreAllMocks()` (jest-mock, bundled with jest-lite).
+- `expect(promise).rejects.toThrow()`.
+- Results carry `name`, `suitePath`, `fullName`, `sourceCode` and `filteredOut`.
+- TypeScript types for the test globals, API documentation in `docs/`, and examples in `examples/`.
+
 ### Changed
-- Sources split into modules: `reporter/` (reporter class, templates, running indicator, result helpers, `styles.css`), `runner/` (jest-lite wrapper and globals), `utils/`.
-- Reporter styles are injected when the module is imported, like the Prism theme.
+- `run()` resolves with a `RunSummary` instead of an array of results.
+- A row's **▶ Run** runs exactly that test; before, it ran every test whose name contained its name.
+- Error details and source code are highlighted when first opened, not for every row up front.
+- The Prism theme is scoped to the reporter and no longer restyles the host page's code blocks.
+- Unsupported `jest.*` functions throw an error instead of logging a warning.
+- The package no longer sets `window.JestBrowserReporter` on import; the UMD build exposes the namespace there.
+- Sources split into modules: `reporter/`, `runner/`, `utils/`.
+
+### Deprecated
+- `run(string)`: use `run({ filter })`.
+- `showBackLink`: use `backLink`.
+- `TestResult.testPath`: use `suitePath`, `name` or `fullName`.
+- The global `run()`.
+
+### Removed
+- The mutable fields `currentFilter`, `currentSearch`, `groupBySuite` and `elements` of `JestBrowserReporter`.
 
 ### Fixed
+- Errors of a failing test accumulated with every re-run.
+- `.only` inside a nested `describe` was ignored when the outer `describe` had no focused tests of its own.
 - The "Test execution failed" banner was hidden right after being shown.
 - Expanding a collapsed suite group showed rows hidden by the current filter or search.
 - HTML entities (e.g. `&amp;`) appeared in the "Running test: …" status line.
+- The Duration column was always empty.
+- The `unpkg` field pointed to a file that does not exist.
 
 ## [1.0.3] - 2025-12-02
 ### Added

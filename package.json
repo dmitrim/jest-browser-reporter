@@ -10,7 +10,7 @@
     "test": "npm run test:unit && npm run check:examples && npm run test:e2e",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
-    "check:examples": "tsc -p tests/examples/tsconfig.json",
+    "check:examples": "node tests/examples/check.mjs",
     "package": "npm run build && npm pack ./dist",
     "release": "npm run build && npm test && npm publish ./dist"
   },

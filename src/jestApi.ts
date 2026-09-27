@@ -160,7 +160,10 @@ export interface Expect {
     extend(matchers: Record<string, (this: any, received: any, ...args: any[]) => { pass: boolean; message: () => string }>): void;
 }
 
-/** A mock function created by `jest.fn()` or `jest.spyOn()`. */
+/**
+ * A mock function created by `jest.fn()` or `jest.spyOn()`.
+ * @typeParam T - Signature of the mocked function.
+ */
 export interface Mock<T extends (...args: any[]) => any = (...args: any[]) => any> {
     /** Calls the current implementation and records the call. */
     (...args: Parameters<T>): ReturnType<T>;
@@ -171,7 +174,12 @@ export interface Mock<T extends (...args: any[]) => any = (...args: any[]) => an
         /** `this` of each call. */
         instances: unknown[];
         /** Outcome of each call. */
-        results: Array<{ type: 'return' | 'throw' | 'incomplete'; value: unknown }>;
+        results: Array<{
+            /** Whether the call returned, threw, or has not finished yet. */
+            type: 'return' | 'throw' | 'incomplete';
+            /** The returned value or the thrown error. */
+            value: unknown;
+        }>;
     };
     /** Clears the recorded calls. */
     mockClear(): this;
@@ -210,11 +218,14 @@ export type Unsupported = (...args: unknown[]) => never;
 
 /** The `jest` object. */
 export interface Jest {
-    /** Creates a mock function, optionally with an implementation. */
+    /**
+     * Creates a mock function, optionally with an implementation.
+     * @typeParam T - Signature of the mocked function.
+     */
     fn<T extends (...args: any[]) => any = (...args: any[]) => any>(implementation?: T): Mock<T>;
     /** Replaces `object[method]` with a mock that calls the original method. */
     spyOn<O extends object, K extends keyof O>(object: O, method: K): O[K] extends (...args: any[]) => any ? Mock<O[K]> : never;
-    /** Checks whether `fn` was created by {@link fn} or {@link spyOn}. */
+    /** Checks whether `fn` was created by {@link Jest.fn} or {@link Jest.spyOn}. */
     isMockFunction(fn: unknown): fn is Mock;
     /** Clears the recorded calls of all mocks. */
     clearAllMocks(): Jest;

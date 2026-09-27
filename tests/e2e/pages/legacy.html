@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Legacy 1.x usage</title>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- Exactly the pattern documented for 1.x (and used by existing consumers). -->
+    <script type="module">
+        import { setupJestLiteGlobals } from 'jest-browser-reporter';
+        setupJestLiteGlobals();
+    </script>
+
+    <script type="module">
+        import '../fixtures/sample.tests.js';
+        import { JestBrowserReporter } from 'jest-browser-reporter';
+
+        const reporter = new JestBrowserReporter({
+            container: document.getElementById('root'),
+            showBackLink: true
+        });
+        reporter.run();
+    </script>
+</body>
+</html>

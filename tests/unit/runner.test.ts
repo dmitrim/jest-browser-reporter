@@ -204,6 +204,17 @@ describe('globals', () => {
         expect(results[0].status).toBe('pass');
     });
 
+    it('supports rejects.toThrow() like Jest 23+', async () => {
+        g.it('matches', () => g.expect(Promise.reject(new Error('nope'))).rejects.toThrow('nope'));
+        g.it('mismatches', () => g.expect(Promise.reject(new Error('nope'))).rejects.toThrow('other'));
+        g.it('resolved', () => g.expect(Promise.resolve(1)).rejects.toThrow());
+
+        const { results } = await runner.runTests();
+
+        expect(statuses(results)).toEqual({ matches: 'pass', mismatches: 'fail', resolved: 'fail' });
+        expect(results[2].errors[0]).toContain('Promise to reject');
+    });
+
     it('throws a clear error for unsupported jest APIs', () => {
         expect(() => g.jest.useFakeTimers()).toThrow('jest.useFakeTimers() is not supported');
     });

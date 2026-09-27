@@ -25,6 +25,7 @@ export interface TestInfo {
 
 /** Result of a single test. */
 export interface TestResult extends TestInfo {
+    /** Outcome of the test. */
     status: TestStatus;
     /** Error messages with stack traces; empty unless the test failed. */
     errors: string[];
@@ -71,10 +72,15 @@ export interface RunOptions {
 
 /** Number of tests per status. */
 export interface StatusCounts {
+    /** All counted tests. */
     total: number;
+    /** Tests that passed. */
     pass: number;
+    /** Tests that failed. */
     fail: number;
+    /** Tests that were skipped. */
     skip: number;
+    /** Tests cancelled by a stopped run. */
     cancel: number;
 }
 
@@ -86,6 +92,7 @@ export interface RunSummary {
     counts: StatusCounts;
     /** Start time, as a `Date.now()` timestamp. */
     startedAt: number;
+    /** Duration of the run in milliseconds. */
     durationMs: number;
     /** `true` if the run was stopped before all selected tests ran. */
     aborted: boolean;
@@ -93,8 +100,11 @@ export interface RunSummary {
 
 /** Events of {@link JestBrowserReporter.on}, with the payload type of each. */
 export interface ReporterEventMap {
-    /** A run started; `testCount` is the number of tests selected to run. */
-    runStart: { testCount: number };
+    /** A run started. */
+    runStart: {
+        /** Number of tests selected to run. */
+        testCount: number;
+    };
     /** A test started. */
     testStart: TestInfo;
     /** A test finished, was skipped or was cancelled. */

@@ -4678,7 +4678,8 @@ ${d}` : "") + h.replace(/AssertionError(.*)/g, "");
                                         f2 = o2.sent, o2.next = 13;
                                         break;
                                     case 10:
-                                        return o2.prev = 10, o2.t0 = o2.catch(4), o2.abrupt("return", N(t3, n2, o2.t0).apply(null, u2));
+                                        //dma: rejects.toThrow() checks the rejection reason as the thrown error, as Jest 23+ does
+                                        return o2.prev = 10, o2.t0 = o2.catch(4), o2.abrupt("return", N(t3, n2, /^toThrow/.test(e2) ? (function (reason) { return function () { throw reason; }; })(o2.t0) : o2.t0).apply(null, u2));
                                     case 13:
                                         throw new A(g.matcherHint(s2, "received", "") + "\n\nExpected " + g.RECEIVED_COLOR("received") + " Promise to reject, instead it resolved to value\n  " + g.printReceived(f2));
                                     case 14:

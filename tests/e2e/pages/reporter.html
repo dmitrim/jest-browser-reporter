@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Reporter e2e</title>
+</head>
+<body style="margin: 0">
+    <div id="root"></div>
+    <script type="module">
+        import { createTestPage } from 'jest-browser-reporter';
+
+        const params = new URLSearchParams(location.search);
+        window.reporterReady = createTestPage({
+            container: '#root',
+            title: 'Reporter e2e',
+            theme: params.get('theme') || 'light',
+            tests: () => import('../fixtures/sample.tests.js'),
+        }).then(reporter => (window.reporter = reporter));
+    </script>
+</body>
+</html>

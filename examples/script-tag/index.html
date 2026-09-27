@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Script tag – jest-browser-reporter</title>
+</head>
+<body style="margin: 0">
+    <div id="app"></div>
+
+    <!-- 1. The UMD bundle puts the whole API on window.JestBrowserReporter -->
+    <script src="https://cdn.jsdelivr.net/npm/jest-browser-reporter@2/umd/index.js"></script>
+
+    <!-- 2. Install describe/it/expect before the tests are loaded -->
+    <script>JestBrowserReporter.setupJestLiteGlobals();</script>
+
+    <!-- 3. Plain scripts with tests -->
+    <script src="./tests.js"></script>
+
+    <!-- 4. Render the reporter -->
+    <script>
+        new JestBrowserReporter.JestBrowserReporter({
+            container: '#app',
+            title: 'Script tag example',
+        });
+    </script>
+</body>
+</html>

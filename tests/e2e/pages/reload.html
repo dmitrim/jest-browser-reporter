@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Run interrupted by a reload</title>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="module">
+        import { createTestPage } from 'jest-browser-reporter';
+
+        createTestPage({
+            container: '#root',
+            confirmLeaveWhileRunning: false,
+            tests: () => {
+                describe('Suite', () => {
+                    it('before', () => { });
+                    it('reloads the page', () => {
+                        if (sessionStorage.getItem('reloaded')) return;
+                        sessionStorage.setItem('reloaded', '1');
+                        location.reload();
+                        return new Promise(() => { }); // never settles: the page goes away
+                    });
+                    it('after', () => { });
+                });
+            },
+        }).then(reporter => (window.reporter = reporter));
+    </script>
+</body>
+</html>

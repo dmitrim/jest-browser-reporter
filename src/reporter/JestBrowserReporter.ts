@@ -141,7 +141,11 @@ export class JestBrowserReporter {
         this.indicator = new RunningIndicator(queryRequired(this.root, '.running-indicator'));
 
         this.root.addEventListener('click', e => this.handleClick(e));
-        this.elements.search.addEventListener('input', debounce(() => this.setSearch(this.elements.search.value), 180));
+        const applySearch = debounce(() => this.setSearch(this.elements.search.value), 180);
+        this.elements.search.addEventListener('input', () => {
+            this.settings.save({ search: this.elements.search.value }); // right away: a reload may come before the debounce
+            applySearch();
+        });
         document.addEventListener('keydown', this.onKeydown);
 
         const interrupted = this.runRecords.takeInterrupted();

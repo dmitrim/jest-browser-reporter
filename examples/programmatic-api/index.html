@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Programmatic API – jest-browser-reporter</title>
+    <style>
+        body { margin: 0; font-family: system-ui, sans-serif; }
+        .toolbar { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 20px; background: #1e293b; }
+        .toolbar button { padding: 6px 12px; border-radius: 6px; border: none; cursor: pointer; }
+        #log { margin: 0; padding: 12px 20px; height: 140px; overflow: auto; background: #0f172a; color: #cbd5e1; font: 12px/1.5 monospace; }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button id="run-math">run({ filter: 'Math' })</button>
+        <button id="run-regexp">run({ filter: /slow/ })</button>
+        <button id="run-fn">run({ filter: test =&gt; … })</button>
+        <button id="run-failed">runFailed()</button>
+        <button id="run-timeout">run() with a 1.5 s AbortSignal</button>
+        <button id="stop">stop()</button>
+    </div>
+    <pre id="log"></pre>
+    <div id="app"></div>
+    <script type="module" src="./main.js"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "jest-browser-reporter-example-typescript",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "jest-browser-reporter": "^2.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vite": "^6.0.0"
+  }
+}
