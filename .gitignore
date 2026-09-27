@@ -3,3 +3,4 @@ dist/
 .vs/
 test-results/
 playwright-report/
+*.tgz
