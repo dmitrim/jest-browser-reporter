@@ -269,14 +269,44 @@ describe('JestBrowserReporter', () => {
 
         reporter = new lib.JestBrowserReporter({ container: '#root' });
         expect($('.running-indicator').textContent).toMatch(/the last full run took \d+ms/);
-        const starts: Array<number | null> = [];
-        reporter.on('runStart', e => starts.push(e.estimatedMs));
+        const starts: Array<{ estimatedMs: number | null; untimedTests: number }> = [];
+        reporter.on('runStart', e => starts.push(e));
         const second = await reporter.run();
 
-        expect(starts[0]).toBe(first.durationMs);
+        const firstTestsMs = first.results.reduce((sum, r) => sum + (r.duration ?? 0), 0);
+        expect(starts[0].untimedTests).toBe(0);
+        expect(starts[0].estimatedMs).toBe(firstTestsMs); // the run was too short to learn an overhead
         expect(second.results[0].previousDuration).toBe(first.results[0].duration);
         expect($('tr[data-id="waits"] .duration-prev').textContent).toMatch(/prev \d+ms/);
         expect($('.stat.time .stat-label').textContent).toContain('prev');
+    });
+
+    it('after a stopped run, shows a lower bound instead of guessing the untimed tests', async () => {
+        g.it('first', () => new Promise(resolve => setTimeout(resolve, 30)));
+        g.it('second', () => new Promise(resolve => setTimeout(resolve, 30)));
+        g.it('third', () => new Promise(resolve => setTimeout(resolve, 30)));
+        reporter = new lib.JestBrowserReporter({ container: '#root' });
+
+        const stopped = reporter.run();
+        const unsubscribe = reporter.on('testDone', () => reporter!.stop()); // stop after the first test
+        await stopped;
+        unsubscribe();
+
+        const messages: string[] = [];
+        const starts: Array<{ estimatedMs: number | null; untimedTests: number }> = [];
+        reporter.on('runStart', e => {
+            starts.push(e);
+            messages.push($('.running-main-text').textContent!, $('.running-estimate').textContent!);
+        });
+        await reporter.run();
+
+        expect(starts[0].untimedTests).toBe(2);
+        expect(messages[0]).toMatch(/Running all tests · ≥ \d+ms · 2 tests not timed yet/);
+        expect(messages[1]).toMatch(/≥ \d+ms left · 2 tests not timed yet/);
+
+        await reporter.run();
+        expect(starts[1].untimedTests).toBe(0);
+        expect(messages[2]).toMatch(/Running all tests · ≈ \d+ms$/);
     });
 
     it('does not persist durations when settings do not persist', async () => {

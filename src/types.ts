@@ -121,10 +121,13 @@ export interface ReporterEventMap {
         /** Number of tests selected to run. */
         testCount: number;
         /**
-         * Expected duration of the run in milliseconds, from the remembered durations of the selected
-         * tests (tests never run count as the average); `null` when no durations are known.
+         * Expected duration of the run in milliseconds: the remembered durations of the selected tests
+         * plus the overhead learned from earlier runs. With `untimedTests` > 0 it is a lower
+         * bound, since the time of those tests is not guessed; `null` when no duration is known.
          */
         estimatedMs: number | null;
+        /** Selected tests without a remembered duration. */
+        untimedTests: number;
     };
     /** A test started. */
     testStart: TestInfo;

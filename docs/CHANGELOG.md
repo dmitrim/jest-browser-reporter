@@ -29,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - An automatic run (`autoRun: true`, `?autorun`) runs what the saved search and "Failed" filter select, announced by a notice with a **Run all tests** button; `autoRun: 'all'` always runs everything.
 - Sorting by status, test name or duration by clicking a column header; the sort is remembered.
 - Durations are formatted by size: `850ms`, `1sec 234ms`, `2min 5sec`, `1h 3min`.
-- Test durations are remembered: each row shows the test's previous duration (▲ slower / ▼ faster), results carry `previousDuration`, the progress shows the estimated time left, the summary shows the run time next to the previous one, and the `runStart` event carries `estimatedMs`.
+- Test durations are remembered: each row shows the test's previous duration (▲ slower / ▼ faster), results carry `previousDuration`, the progress shows the estimated time left (a lower bound while some tests were never timed; the overhead of hooks is learned from every run, stopped ones included), the summary shows the run time next to the previous one, and the `runStart` event carries `estimatedMs` and `untimedTests`.
 - Options `title`, `backLink` (boolean or URL), `theme` (`light` / `dark` / `auto`), `defaultTimeout`, `urlParams`; `container` also accepts a CSS selector.
 - `it.each`, `test.each`, `describe.each` and `it.todo`.
 - Real `jest.fn()`, `jest.spyOn()`, `jest.isMockFunction()`, `clearAllMocks()`, `resetAllMocks()`, `restoreAllMocks()` (jest-mock, bundled with jest-lite).

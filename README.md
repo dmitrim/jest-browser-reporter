@@ -84,7 +84,8 @@ A notice above the results says so and offers **Run all tests**. `autoRun: 'all'
 
 Test durations and the time of the last full run are remembered in `localStorage` (with the other settings);
 from them the progress bar shows the estimated time left, and the summary shows the total run time next to
-the previous one.
+the previous one. Tests that were never timed are not guessed: until they are, the estimate is a lower bound,
+e.g. `≥ 40sec · 700 tests not timed yet`.
 
 While tests run, a test **cannot navigate the page away**: `location.href = …`, `location.reload()` or a
 `location` assigned an object are silently cancelled, and a notice names the test and the address it tried to

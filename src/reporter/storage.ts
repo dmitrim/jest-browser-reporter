@@ -83,7 +83,20 @@ interface SavedDurations {
     tests: Record<string, number>;
     /** Duration of the last complete run of all tests. */
     lastFullRunMs?: number;
+    /** Wall time of a run per summed test time: hooks and other overhead. */
+    overheadRatio?: number;
 }
+
+/** Remembered time of some tests; tests never timed are counted, not guessed. */
+export interface DurationEstimate {
+    /** Summed remembered durations of the timed tests. */
+    knownMs: number;
+    /** Tests without a remembered duration. */
+    untimed: number;
+}
+
+/** Runs with less test time than this say little about the overhead. */
+const MIN_SAMPLE_MS = 200;
 
 /**
  * Remembered test durations, in `localStorage` under `<key>:durations`; kept in memory only when
@@ -96,7 +109,11 @@ export class DurationStore {
     constructor(baseKey: string | null) {
         this.key = baseKey && `${baseKey}:durations`;
         const saved = this.key ? readJson<SavedDurations>(() => localStorage, this.key) : undefined;
-        this.data = { tests: saved?.tests && typeof saved.tests === 'object' ? saved.tests : {}, lastFullRunMs: saved?.lastFullRunMs };
+        this.data = {
+            tests: saved?.tests && typeof saved.tests === 'object' ? saved.tests : {},
+            lastFullRunMs: saved?.lastFullRunMs,
+            overheadRatio: saved?.overheadRatio,
+        };
     }
 
     get(fullName: string): number | null {
@@ -116,21 +133,33 @@ export class DurationStore {
         this.data.lastFullRunMs = ms ?? undefined;
     }
 
+    /** Overhead factor learned from earlier runs; 1 until one was long enough to tell. */
+    get overheadRatio(): number {
+        return this.data.overheadRatio ?? 1;
+    }
+
     /**
-     * Expected total duration of these tests: known durations, plus their average for the rest;
-     * `null` when none is known.
+     * Learns the overhead from a run — stopped runs included: its wall time per summed time of the
+     * tests that ran. Short runs are ignored; the factor is kept within 1–5.
      */
-    estimate(fullNames: Iterable<string>): number | null {
-        let known = 0;
-        let knownCount = 0;
-        let unknownCount = 0;
+    learnOverhead(wallMs: number, testsMs: number): void {
+        if (testsMs < MIN_SAMPLE_MS) return;
+        this.data.overheadRatio = Math.min(5, Math.max(1, wallMs / testsMs));
+    }
+
+    /**
+     * Remembered time of these tests, overhead included. Tests never timed are only counted: their
+     * time is not guessed, so with `untimed > 0` the result is a lower bound.
+     */
+    estimate(fullNames: Iterable<string>): DurationEstimate {
+        let knownMs = 0;
+        let untimed = 0;
         for (const name of fullNames) {
             const ms = this.get(name);
-            if (ms === null) unknownCount++;
-            else { known += ms; knownCount++; }
+            if (ms === null) untimed++;
+            else knownMs += ms;
         }
-        if (!knownCount) return null;
-        return known + unknownCount * (known / knownCount);
+        return { knownMs: knownMs * this.overheadRatio, untimed };
     }
 
     save(): void {

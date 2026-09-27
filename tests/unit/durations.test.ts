@@ -56,23 +56,38 @@ describe('sorting', () => {
 });
 
 describe('DurationStore', () => {
-    it('estimates unknown tests as the average of the known ones', () => {
+    it('sums the known durations and only counts the untimed tests, without guessing them', () => {
         const store = new DurationStore(null);
-        expect(store.estimate(['a', 'b'])).toBeNull();
+        expect(store.estimate(['a', 'b'])).toEqual({ knownMs: 0, untimed: 2 });
         store.set('a', 100);
         store.set('b', 300);
-        expect(store.estimate(['a', 'b', 'c', 'd'])).toBe(800);
+        expect(store.estimate(['a', 'b', 'c', 'd'])).toEqual({ knownMs: 400, untimed: 2 });
+    });
+
+    it('learns the overhead from any long enough run, within 1–5', () => {
+        const store = new DurationStore(null);
+        store.set('a', 1000);
+        store.learnOverhead(900, 100); // too short to tell
+        expect(store.overheadRatio).toBe(1);
+        store.learnOverhead(1500, 1000);
+        expect(store.estimate(['a']).knownMs).toBe(1500);
+        store.learnOverhead(60_000, 1000);
+        expect(store.overheadRatio).toBe(5);
+        store.learnOverhead(500, 1000);
+        expect(store.overheadRatio).toBe(1);
     });
 
     it('persists durations and the last full run', () => {
         const store = new DurationStore('dur-test');
         store.set('S › t', 1234);
         store.lastFullRunMs = 5000;
+        store.learnOverhead(2468, 1234);
         store.save();
 
         const reloaded = new DurationStore('dur-test');
         expect(reloaded.get('S › t')).toBe(1234);
         expect(reloaded.lastFullRunMs).toBe(5000);
+        expect(reloaded.overheadRatio).toBe(2);
         expect(reloaded.get('unknown')).toBeNull();
     });
 });

@@ -35,8 +35,8 @@ interface ActiveRun {
     frame: number;
     /** Selected tests that have not finished yet, for the time estimate. */
     remaining: Set<string>;
-    /** Real run time per remembered test time: covers hooks and overhead in the estimate. */
-    estimateScale: number;
+    /** Summed durations of the tests that ran, to learn the overhead from. */
+    testsMs: number;
     /** Remembered duration of each test before this run. */
     previous: Map<string, number | null>;
     currentTest: string | null;
@@ -250,7 +250,7 @@ export class JestBrowserReporter {
         const filter = createTestPredicate(options, this.failedTests);
         const run: ActiveRun = {
             controller: new AbortController(), testCount: 0, done: 0, pending: [], frame: 0,
-            remaining: new Set(), estimateScale: 1, previous: new Map(),
+            remaining: new Set(), testsMs: 0, previous: new Map(),
             currentTest: null, blockedNavigations: [], releaseNavigation: () => undefined, navigationNotice: null,
         };
         if (this.options.blockNavigation !== false) {
@@ -291,17 +291,17 @@ export class JestBrowserReporter {
                     run.remaining = new Set(tests.map(t => t.fullName));
                     if (label) message = `Filtered run: ${tests.length} of ${getRegisteredTests().length} tests (${label})`;
                     this.indicator.setMessage(message);
-                    // A full run is best predicted by the last full run; otherwise sum the tests
-                    const testsMs = this.durations.estimate(run.remaining);
-                    const lastFullRunMs = this.durations.lastFullRunMs;
-                    const estimatedMs = !filter && lastFullRunMs !== null ? lastFullRunMs : testsMs;
-                    run.estimateScale = estimatedMs && testsMs ? estimatedMs / testsMs : 1;
-
-                    if (estimatedMs !== null) this.indicator.setMessage(`${message} · ≈ ${formatDuration(estimatedMs)}`);
+                    const estimate = this.durations.estimate(run.remaining);
+                    const expected = formatEstimate(estimate, '');
+                    if (expected) this.indicator.setMessage(`${message} · ${expected}`);
                     this.indicator.setProgress(0, run.testCount);
                     this.updateEstimate(run);
                     this.runRecords.begin(run.testCount);
-                    this.emit('runStart', { testCount: run.testCount, estimatedMs });
+                    this.emit('runStart', {
+                        testCount: run.testCount,
+                        estimatedMs: estimate.knownMs || estimate.untimed < run.testCount ? estimate.knownMs : null,
+                        untimedTests: estimate.untimed,
+                    });
                 },
                 onTestStart: test => {
                     run.currentTest = test.fullName;
@@ -315,6 +315,7 @@ export class JestBrowserReporter {
                     result.previousDuration = previous;
                     if (result.duration !== null && (result.status === 'pass' || result.status === 'fail')) {
                         this.durations.set(result.fullName, result.duration);
+                        run.testsMs += result.duration;
                     }
                     run.remaining.delete(result.fullName);
                     if (result.status === 'pass' || result.status === 'fail') {
@@ -339,6 +340,7 @@ export class JestBrowserReporter {
                 blockedNavigations: run.blockedNavigations,
             };
             this.summary = summary;
+            this.durations.learnOverhead(summary.durationMs, run.testsMs);
             this.finishRun(summary, !filter, run.testCount);
             return summary;
         } catch (error) {
@@ -546,10 +548,7 @@ export class JestBrowserReporter {
 
     /** Time left, from the remembered durations of the tests that have not finished. */
     private updateEstimate(run: ActiveRun): void {
-        const remainingMs = this.durations.estimate(run.remaining);
-        this.indicator.setEstimate(remainingMs === null || !run.remaining.size
-            ? ''
-            : `≈ ${formatDuration(remainingMs * run.estimateScale)} left`);
+        this.indicator.setEstimate(run.remaining.size ? formatEstimate(this.durations.estimate(run.remaining), ' left') : '');
     }
 
     /** A test excluded by the filter keeps its previous result, marked as stale. */
@@ -847,6 +846,16 @@ function resolveContainer(container: HTMLElement | string | undefined): HTMLElem
     const element = document.querySelector<HTMLElement>(container);
     if (!element) throw new Error(`jest-browser-reporter: container "${container}" not found`);
     return element;
+}
+
+/**
+ * "≈ 2min" when every test has a remembered time; "≥ 40sec · 700 tests not timed yet" when some do
+ * not (their time is not guessed); empty when none does.
+ */
+function formatEstimate({ knownMs, untimed }: { knownMs: number; untimed: number }, suffix: string): string {
+    if (!knownMs) return '';
+    if (!untimed) return `≈ ${formatDuration(knownMs)}${suffix}`;
+    return `≥ ${formatDuration(knownMs)}${suffix} · ${untimed} ${untimed === 1 ? 'test' : 'tests'} not timed yet`;
 }
 
 function rowId(element: HTMLElement): string {
